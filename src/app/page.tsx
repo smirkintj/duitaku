@@ -25,7 +25,23 @@ interface PageProps {
   searchParams: Promise<{ m?: string }>
 }
 
+function DbSetupCard({ message }: { message: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0d0d0d', fontFamily: '"Geist", -apple-system, sans-serif' }}>
+      <div style={{ maxWidth: 440, background: '#111', border: '1px solid #222', borderRadius: 16, padding: '36px 40px', textAlign: 'center' }}>
+        <div style={{ fontSize: 32, marginBottom: 16 }}>⚠️</div>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', margin: '0 0 10px' }}>Database not configured</h1>
+        <p style={{ fontSize: 14, color: '#7a7a78', margin: 0, lineHeight: 1.6 }}>{message}</p>
+      </div>
+    </div>
+  )
+}
+
 export default async function HomePage({ searchParams }: PageProps) {
+  if (!process.env.DATABASE_URL) {
+    return <DbSetupCard message="Set DATABASE_URL in your Vercel project environment variables, then redeploy." />
+  }
+
   const sp = await searchParams
   const mParam = sp.m
 
