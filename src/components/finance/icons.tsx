@@ -25,6 +25,9 @@ type IconName =
   | 'arrowUp'
   | 'arrowDown'
   | 'logout'
+  | 'bills'
+  | 'savings'
+  | 'piggy'
 
 type CategoryIconName =
   | 'bag'
@@ -184,6 +187,29 @@ export function Icon({ name, width = 20, height = 20, className, style }: NamedI
       return (
         <svg {...common}>
           <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h12" />
+        </svg>
+      )
+    case 'bills':
+      return (
+        <svg {...common}>
+          <rect x="5" y="3" width="14" height="18" rx="2"/>
+          <path d="M9 7h6M9 11h6M9 15h4"/>
+          <path d="M5 7H3M5 11H3M5 15H3"/>
+        </svg>
+      )
+    case 'savings':
+      return (
+        <svg {...common}>
+          <ellipse cx="12" cy="6" rx="7" ry="2.5"/>
+          <path d="M5 6v4c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6"/>
+          <path d="M5 10v4c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-4"/>
+        </svg>
+      )
+    case 'piggy':
+      return (
+        <svg {...common}>
+          <path d="M19 9c0-3.3-3.1-6-7-6S5 5.7 5 9c0 1.5.6 2.9 1.6 4H5l1 4h2v2h8v-2h2l1-4h-1.6C19.4 11.9 20 10.5 19 9z"/>
+          <path d="M9 9h.01M20 9h2"/>
         </svg>
       )
     default:
