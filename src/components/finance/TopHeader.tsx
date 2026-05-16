@@ -34,6 +34,13 @@ function formatMonthLabel(month: string): string {
   return new Date(y, m - 1, 1).toLocaleString('en-MY', { month: 'short', year: 'numeric' }).toUpperCase()
 }
 
+function greeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
 export default function TopHeader({ remaining, month, onAdd }: TopHeaderProps) {
   const router = useRouter()
   const monthLabel = formatMonthLabel(month)
@@ -45,9 +52,7 @@ export default function TopHeader({ remaining, month, onAdd }: TopHeaderProps) {
     <div
       style={{
         height: 72,
-        background: 'rgba(13,13,13,0.85)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        background: '#0d0d0d',
         borderBottom: '1px solid #141414',
         position: 'sticky',
         top: 0,
@@ -79,7 +84,7 @@ export default function TopHeader({ remaining, month, onAdd }: TopHeaderProps) {
             color: '#f5f5f4',
           }}
         >
-          Good afternoon, Aiman.
+          {greeting()}, Putra.
         </span>
       </div>
 

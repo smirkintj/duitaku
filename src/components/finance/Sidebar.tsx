@@ -263,12 +263,12 @@ export default function Sidebar({ active, setActive, expanded, setExpanded }: Si
               fontFamily: '"Geist", -apple-system, sans-serif',
             }}
           >
-            A
+            P
           </div>
           {expanded && (
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#d0d0cf', fontFamily: '"Geist", -apple-system, sans-serif' }}>
-                Aiman
+                Putra
               </span>
               <span style={{ fontSize: 9, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em' }}>
                 free plan

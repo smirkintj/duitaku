@@ -213,18 +213,8 @@ export default async function HomePage({ searchParams }: PageProps) {
     })
     .filter((c) => c.spent > 0 || c.budget > 0)
 
-  // Last 8 transactions
-  const last8 = await db
-    .select()
-    .from(financeTransactions)
-    .where(
-      and(
-        gte(financeTransactions.date, startDate),
-        lte(financeTransactions.date, endDate),
-      ),
-    )
-    .orderBy(desc(financeTransactions.date))
-    .limit(8)
+  // Last 8 transactions (derived from already-fetched monthTxs)
+  const last8 = [...monthTxs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8)
 
   // Build recent transactions with category info
   const catMap = new Map(categories.map((c) => [c.id, c]))
