@@ -6,6 +6,7 @@ import { formatRM } from '@/lib/finance-utils'
 interface StatsColumnProps {
   income: number
   spent: number
+  saved: number
   dayOfMonth: number
   daysIn: number
 }
@@ -119,31 +120,33 @@ function StatCard({ eyebrow, amount, caption, delta }: StatCardProps) {
   )
 }
 
-export default function StatsColumn({ income, spent, dayOfMonth, daysIn }: StatsColumnProps) {
-  const projected = Math.round((spent / dayOfMonth) * daysIn)
+export default function StatsColumn({ income, spent, saved, dayOfMonth, daysIn }: StatsColumnProps) {
+  const projected = dayOfMonth > 0 ? Math.round((spent / dayOfMonth) * daysIn) : 0
+  const free = Math.max(0, income - spent - saved)
   const projectedDelta = projected - income
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <StatCard
-        eyebrow="INCOME · MTD"
+        eyebrow="RECEIVED"
         amount={income}
-        caption="Mei salary received May 14"
+        caption="income this month"
       />
       <StatCard
-        eyebrow="SPENT · MTD"
+        eyebrow="SPENT"
         amount={spent}
-        caption="across 47 transactions"
-        delta={{ label: '+3.6%', tone: 'warn' }}
+        caption="expenses this month"
+        delta={
+          dayOfMonth > 0 && income > 0
+            ? { label: projectedDelta > 0 ? `proj. RM ${formatRM(projectedDelta, 0)} short` : `on track`, tone: projectedDelta > 0 ? 'danger' : 'lime' }
+            : undefined
+        }
       />
       <StatCard
-        eyebrow="PROJECTED END OF MAY"
-        amount={projected}
-        caption="if current pace continues"
-        delta={{
-          label: projectedDelta > 0 ? `RM ${formatRM(projectedDelta, 0)} short` : `RM ${formatRM(Math.abs(projectedDelta), 0)} surplus`,
-          tone: projectedDelta > 0 ? 'danger' : 'lime',
-        }}
+        eyebrow="SAVED"
+        amount={saved}
+        caption="set aside this month"
+        delta={saved > 0 && income > 0 ? { label: `${Math.round((saved / income) * 100)}% of income`, tone: 'lime' } : undefined}
       />
     </div>
   )

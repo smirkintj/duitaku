@@ -93,9 +93,9 @@ export default async function HomePage({ searchParams }: PageProps) {
     db.select().from(financeCategories),
   ])
 
-  const salary = salaryRows[0]?.amount ?? 0
+  const salaryDefault = salaryRows[0]?.amount ?? 0
 
-  // If no salary, show setup screen
+  // If no salary ever set, show first-time setup
   if (!salaryRows[0]) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0d0d0d' }}>
@@ -104,10 +104,26 @@ export default async function HomePage({ searchParams }: PageProps) {
     )
   }
 
-  // Compute spent/remaining
+  // Income = sum of income transactions this month (with salary as fallback)
+  const incomeTxs = monthTxs.filter((t) => t.type === 'income')
+  const totalIncome = incomeTxs.reduce((a, t) => a + t.amount, 0)
+  const hasPaidThisMonth = totalIncome > 0
+  const income = hasPaidThisMonth ? totalIncome : salaryDefault
+
+  // Savings = expense txs in a "savings" category
+  const savingsCatIds = new Set(
+    categories
+      .filter((c) => c.name.toLowerCase().includes('saving'))
+      .map((c) => c.id)
+  )
   const expenseTxs = monthTxs.filter((t) => t.type === 'expense')
-  const spent = expenseTxs.reduce((a, t) => a + t.amount, 0)
-  const remaining = Math.max(0, salary - spent)
+  const savingsTxs = expenseTxs.filter((t) => t.categoryId && savingsCatIds.has(t.categoryId))
+  const spendTxs = expenseTxs.filter((t) => !(t.categoryId && savingsCatIds.has(t.categoryId)))
+
+  const saved = savingsTxs.reduce((a, t) => a + t.amount, 0)
+  const spent = spendTxs.reduce((a, t) => a + t.amount, 0)
+  const salary = income  // alias used downstream
+  const remaining = Math.max(0, income - spent - saved)
 
   // Daily spend array
   const dailySpend: number[] = Array(daysIn).fill(0)
@@ -251,6 +267,8 @@ export default async function HomePage({ searchParams }: PageProps) {
           remaining={remaining}
           salary={salary}
           month={monthStr}
+          hasPaidThisMonth={hasPaidThisMonth}
+          salaryDefault={salaryDefault}
         />
         <main
           style={{
@@ -280,8 +298,9 @@ export default async function HomePage({ searchParams }: PageProps) {
               month={monthStr}
             />
             <StatsColumn
-              income={salary}
+              income={income}
               spent={spent}
+              saved={saved}
               dayOfMonth={dayOfMonth}
               daysIn={daysIn}
             />

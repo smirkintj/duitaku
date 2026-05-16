@@ -9,8 +9,10 @@ import { formatRM } from '@/lib/finance-utils'
 interface TopHeaderProps {
   remaining: number
   salary: number
-  month: string // YYYY-MM
+  month: string
   onAdd?: () => void
+  onPayday?: () => void
+  hasPaidThisMonth?: boolean
 }
 
 function prevMonth(month: string): string {
@@ -41,7 +43,7 @@ function greeting() {
   return 'Good evening'
 }
 
-export default function TopHeader({ remaining, month, onAdd }: TopHeaderProps) {
+export default function TopHeader({ remaining, month, onAdd, onPayday, hasPaidThisMonth }: TopHeaderProps) {
   const router = useRouter()
   const monthLabel = formatMonthLabel(month)
 
@@ -230,6 +232,24 @@ export default function TopHeader({ remaining, month, onAdd }: TopHeaderProps) {
             }}
           />
         </button>
+
+        {/* Payday button — shown when income not yet recorded */}
+        {!hasPaidThisMonth && onPayday && (
+          <button
+            onClick={onPayday}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'rgba(163,230,53,0.1)',
+              color: '#a3e635',
+              border: '1px solid rgba(163,230,53,0.3)',
+              borderRadius: 9, padding: '0 12px', height: 36,
+              cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              fontFamily: '"Geist", -apple-system, sans-serif',
+            }}
+          >
+            🎉 Got paid?
+          </button>
+        )}
 
         {/* Add button */}
         <button

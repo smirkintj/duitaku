@@ -3,22 +3,24 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import TopHeader from './TopHeader'
 import AddTransactionModal from './AddTransactionModal'
+import PaydayModal from './PaydayModal'
 import { useRouter } from 'next/navigation'
 
 interface DashboardClientProps {
   remaining: number
   salary: number
-  month: string // YYYY-MM
+  month: string
+  hasPaidThisMonth: boolean
+  salaryDefault: number
 }
 
-export default function DashboardClient({ remaining, salary, month }: DashboardClientProps) {
+export default function DashboardClient({ remaining, salary, month, hasPaidThisMonth, salaryDefault }: DashboardClientProps) {
   const [showModal, setShowModal] = useState(false)
+  const [showPayday, setShowPayday] = useState(false)
   const router = useRouter()
 
-  const openModal = useCallback(() => setShowModal(true), [])
-  const closeModal = useCallback(() => setShowModal(false), [])
+  const refresh = useCallback(() => router.refresh(), [router])
 
-  // ⌘N keyboard shortcut
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
@@ -36,15 +38,21 @@ export default function DashboardClient({ remaining, salary, month }: DashboardC
         remaining={remaining}
         salary={salary}
         month={month}
-        onAdd={openModal}
+        onAdd={() => setShowModal(true)}
+        onPayday={() => setShowPayday(true)}
+        hasPaidThisMonth={hasPaidThisMonth}
       />
       {showModal && (
         <AddTransactionModal
-          onClose={closeModal}
-          onSuccess={() => {
-            closeModal()
-            router.refresh()
-          }}
+          onClose={() => setShowModal(false)}
+          onSuccess={() => { setShowModal(false); refresh() }}
+        />
+      )}
+      {showPayday && (
+        <PaydayModal
+          defaultAmount={salaryDefault}
+          onClose={() => setShowPayday(false)}
+          onSaved={() => { setShowPayday(false); refresh() }}
         />
       )}
     </>
