@@ -106,9 +106,8 @@ function DayPacingDial({
 
 function SpendCurve({ data, dayOfMonth }: { data: number[]; dayOfMonth: number }) {
   const W = 1000
-  const H = 82
   const CANVAS_H = 64
-  const LABEL_H = 18
+  const LABEL_H = 0
   const PAD_L = 4
   const PAD_R = 4
 
@@ -146,11 +145,8 @@ function SpendCurve({ data, dayOfMonth }: { data: number[]; dayOfMonth: number }
   const g1Y = CANVAS_H * 0.33
   const g2Y = CANVAS_H * 0.66
 
-  // X-axis ticks
-  const tickDays = [1, 8, 15, 22, 29]
-
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: CANVAS_H + LABEL_H }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${CANVAS_H}`} style={{ width: '100%', height: CANVAS_H }} preserveAspectRatio="none">
       {/* Grid lines */}
       <line x1={0} y1={g1Y} x2={W} y2={g1Y} stroke="#1f1f1f" strokeWidth={1} strokeDasharray="4 4" />
       <line x1={0} y1={g2Y} x2={W} y2={g2Y} stroke="#1f1f1f" strokeWidth={1} strokeDasharray="4 4" />
@@ -195,25 +191,6 @@ function SpendCurve({ data, dayOfMonth }: { data: number[]; dayOfMonth: number }
         opacity={0.3}
       />
 
-      {/* X-axis labels */}
-      {tickDays.map((d) => {
-        const idx = d - 1
-        const x = xOf(idx)
-        return (
-          <text
-            key={d}
-            x={x}
-            y={CANVAS_H + LABEL_H - 3}
-            textAnchor="middle"
-            fill="#5b5b59"
-            fontSize={28}
-            fontFamily='"JetBrains Mono", monospace'
-            style={{ fontSize: 28 }}
-          >
-            {d}
-          </text>
-        )
-      })}
     </svg>
   )
 }

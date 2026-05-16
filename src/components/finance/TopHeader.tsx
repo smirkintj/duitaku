@@ -247,7 +247,8 @@ export default function TopHeader({ remaining, month, onAdd, onPayday, hasPaidTh
               fontFamily: '"Geist", -apple-system, sans-serif',
             }}
           >
-            🎉 Got paid?
+            <Icon name="arrowDown" width={14} height={14} />
+            Got paid?
           </button>
         )}
 

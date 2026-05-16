@@ -3,6 +3,14 @@
 import React, { useState } from 'react'
 import { Icon } from './icons'
 
+function IncomeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 19V5M5.5 11.5l6.5 6.5 6.5-6.5" />
+    </svg>
+  )
+}
+
 interface Props {
   defaultAmount: number
   onClose: () => void
@@ -36,9 +44,14 @@ export default function PaydayModal({ defaultAmount, onClose, onSaved }: Props) 
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
       <div style={{ background: '#111', border: '1px solid #222', borderRadius: 16, padding: '28px 32px', width: 380, maxWidth: '92vw' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif' }}>
-            🎉 Got paid?
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 7, background: 'rgba(163,230,53,0.1)', border: '1px solid rgba(163,230,53,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a3e635' }}>
+              <IncomeIcon />
+            </div>
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif' }}>
+              Got paid?
+            </span>
+          </div>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#5b5b59' }}>
             <Icon name="close" width={18} height={18} />
           </button>
