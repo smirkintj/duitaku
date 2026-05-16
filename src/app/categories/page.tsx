@@ -18,14 +18,68 @@ type CatIconName = typeof ICONS[number]
 
 const S = {
   label: { fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.08em' } as React.CSSProperties,
+  blockLabel: { display: 'block', fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.08em', marginBottom: 6 } as React.CSSProperties,
   sans: { fontFamily: '"Geist", -apple-system, sans-serif' } as React.CSSProperties,
-  mono: { fontFamily: '"JetBrains Mono", monospace' } as React.CSSProperties,
-  input: {
-    background: '#0d0d0d', border: '1px solid #222', borderRadius: 8,
-    padding: '9px 12px', fontSize: 13, color: '#f5f5f4',
-    fontFamily: '"Geist", -apple-system, sans-serif', outline: 'none',
-    width: '100%', boxSizing: 'border-box', colorScheme: 'dark',
-  } as React.CSSProperties,
+  input: { background: '#0d0d0d', border: '1px solid #222', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif', outline: 'none', width: '100%', boxSizing: 'border-box', colorScheme: 'dark' } as React.CSSProperties,
+}
+
+function CategoryForm({
+  initial,
+  onSubmit,
+  submitLabel,
+}: {
+  initial: { name: string; icon: CatIconName; type: string; monthlyLimit: string }
+  onSubmit: (v: typeof initial) => Promise<void>
+  submitLabel: string
+}) {
+  const [form, setForm] = useState(initial)
+  const [saving, setSaving] = useState(false)
+
+  async function handle(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    await onSubmit(form)
+    setSaving(false)
+  }
+
+  return (
+    <form onSubmit={handle} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <label style={S.blockLabel}>NAME</label>
+        <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Food & Drink" style={S.input} />
+      </div>
+      <div>
+        <label style={S.blockLabel}>TYPE</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {(['expense', 'income'] as const).map(t => (
+            <button key={t} type="button" onClick={() => setForm(f => ({ ...f, type: t }))}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: `1px solid ${form.type === t ? '#a3e635' : '#222'}`, background: form.type === t ? 'rgba(163,230,53,0.08)' : 'transparent', color: form.type === t ? '#a3e635' : '#7a7a78', cursor: 'pointer', fontSize: 12, fontWeight: 600, ...S.sans }}>
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label style={S.blockLabel}>ICON</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {ICONS.map(ic => (
+            <button key={ic} type="button" onClick={() => setForm(f => ({ ...f, icon: ic }))}
+              style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${form.icon === ic ? '#a3e635' : '#222'}`, background: form.icon === ic ? 'rgba(163,230,53,0.08)' : 'transparent', color: form.icon === ic ? '#a3e635' : '#5b5b59', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CategoryIcon name={ic} width={16} height={16} />
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label style={S.blockLabel}>MONTHLY LIMIT (RM, optional)</label>
+        <input type="number" min="0" step="0.01" value={form.monthlyLimit} onChange={e => setForm(f => ({ ...f, monthlyLimit: e.target.value }))} placeholder="e.g. 500" style={S.input} />
+      </div>
+      <button type="submit" disabled={saving}
+        style={{ background: saving ? '#1a1a1a' : '#a3e635', color: saving ? '#3a3a3a' : '#0d0d0d', border: 'none', borderRadius: 8, padding: '11px 0', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', ...S.sans, marginTop: 4 }}>
+        {saving ? 'Saving…' : submitLabel}
+      </button>
+    </form>
+  )
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -48,11 +102,8 @@ export default function CategoriesPage() {
   const [cats, setCats] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
-  const [editId, setEditId] = useState<string | null>(null)
+  const [editCat, setEditCat] = useState<Category | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
-
-  // Add form state
-  const [form, setForm] = useState({ name: '', icon: 'bag' as CatIconName, type: 'expense', monthlyLimit: '' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -63,30 +114,24 @@ export default function CategoriesPage() {
 
   useEffect(() => { load() }, [load])
 
-  async function addCategory(e: React.FormEvent) {
-    e.preventDefault()
+  async function addCategory(form: { name: string; icon: CatIconName; type: string; monthlyLimit: string }) {
     await fetch('/api/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: form.name,
-        icon: form.icon,
-        type: form.type,
-        monthlyLimit: form.monthlyLimit ? parseFloat(form.monthlyLimit) : null,
-      }),
+      body: JSON.stringify({ name: form.name, icon: form.icon, type: form.type, monthlyLimit: form.monthlyLimit ? parseFloat(form.monthlyLimit) : null }),
     })
-    setForm({ name: '', icon: 'bag', type: 'expense', monthlyLimit: '' })
     setShowAdd(false)
     load()
   }
 
-  async function saveLimit(id: string, limit: string) {
-    await fetch(`/api/categories/${id}`, {
+  async function editCategory(form: { name: string; icon: CatIconName; type: string; monthlyLimit: string }) {
+    if (!editCat) return
+    await fetch(`/api/categories/${editCat.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ monthlyLimit: limit ? parseFloat(limit) : null }),
+      body: JSON.stringify({ name: form.name, icon: form.icon, type: form.type, monthlyLimit: form.monthlyLimit ? parseFloat(form.monthlyLimit) : null }),
     })
-    setEditId(null)
+    setEditCat(null)
     load()
   }
 
@@ -104,7 +149,6 @@ export default function CategoriesPage() {
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <SidebarClient />
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
         <div style={{ height: 72, background: '#0d0d0d', borderBottom: '1px solid #141414', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', flexShrink: 0 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <span style={S.label}>MANAGE</span>
@@ -119,31 +163,48 @@ export default function CategoriesPage() {
           {loading ? (
             <div style={{ ...S.label, padding: '40px 0', textAlign: 'center' }}>LOADING…</div>
           ) : (
-            [{ label: 'EXPENSE CATEGORIES', items: expense }, { label: 'INCOME CATEGORIES', items: income }].map(group => (
+            [{ label: 'EXPENSE CATEGORIES', items: expense }, { label: 'INCOME CATEGORIES', items: income }].map(group =>
               group.items.length > 0 && (
                 <div key={group.label}>
                   <div style={{ ...S.label, marginBottom: 12 }}>{group.label}</div>
                   <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
-                    {/* Header row */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 160px 36px', gap: 12, padding: '10px 20px', borderBottom: '1px solid #1a1a1a' }}>
-                      {['', 'NAME', 'MONTHLY LIMIT', ''].map((h, i) => <span key={i} style={S.label}>{h}</span>)}
+                    <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 140px 36px 36px', gap: 12, padding: '10px 20px', borderBottom: '1px solid #1a1a1a' }}>
+                      {['', 'NAME', 'MONTHLY LIMIT', '', ''].map((h, i) => <span key={i} style={S.label}>{h}</span>)}
                     </div>
                     {group.items.map((cat, i) => (
-                      <CatRow
-                        key={cat.id}
-                        cat={cat}
-                        isLast={i === group.items.length - 1}
-                        editId={editId}
-                        setEditId={setEditId}
-                        onSaveLimit={saveLimit}
-                        onDelete={deleteCategory}
-                        deleting={deleting}
-                      />
+                      <div key={cat.id} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 140px 36px 36px', gap: 12, padding: '13px 20px', borderBottom: i < group.items.length - 1 ? '1px solid #141414' : 'none', alignItems: 'center' }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a3e635' }}>
+                          <CategoryIcon name={cat.icon as CatIconName} width={16} height={16} />
+                        </div>
+                        <span style={{ fontSize: 13, color: '#f5f5f4', ...S.sans }}>{cat.name}</span>
+                        <span style={{ fontSize: 12, color: cat.monthlyLimit ? '#d0d0cf' : '#3a3a3a', fontFamily: '"JetBrains Mono", monospace' }}>
+                          {cat.monthlyLimit ? `RM ${cat.monthlyLimit.toFixed(0)}` : '—'}
+                        </span>
+                        <button
+                          onClick={() => setEditCat(cat)}
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, padding: 4, transition: 'color 140ms' }}
+                          onMouseEnter={e => { e.currentTarget.style.color = '#a3e635' }}
+                          onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
+                          title="Edit"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                        <button
+                          onClick={() => deleteCategory(cat.id)}
+                          disabled={deleting === cat.id}
+                          style={{ background: 'transparent', border: 'none', cursor: deleting === cat.id ? 'default' : 'pointer', color: '#3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, padding: 4, transition: 'color 140ms' }}
+                          onMouseEnter={e => { if (deleting !== cat.id) e.currentTarget.style.color = '#ef4444' }}
+                          onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
+                          title="Delete"
+                        >
+                          <Icon name="close" width={14} height={14} />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
               )
-            ))
+            )
           )}
 
           {!loading && cats.length === 0 && (
@@ -159,98 +220,23 @@ export default function CategoriesPage() {
 
       {showAdd && (
         <Modal title="New Category" onClose={() => setShowAdd(false)}>
-          <form onSubmit={addCategory} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={{ ...S.label, display: 'block', marginBottom: 6 }}>NAME</label>
-              <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Food & Drink" style={S.input} />
-            </div>
-            <div>
-              <label style={{ ...S.label, display: 'block', marginBottom: 6 }}>TYPE</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {(['expense', 'income'] as const).map(t => (
-                  <button key={t} type="button" onClick={() => setForm(f => ({ ...f, type: t }))}
-                    style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: `1px solid ${form.type === t ? '#a3e635' : '#222'}`, background: form.type === t ? 'rgba(163,230,53,0.08)' : 'transparent', color: form.type === t ? '#a3e635' : '#7a7a78', cursor: 'pointer', fontSize: 12, fontWeight: 600, ...S.sans }}>
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label style={{ ...S.label, display: 'block', marginBottom: 6 }}>ICON</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {ICONS.map(ic => (
-                  <button key={ic} type="button" onClick={() => setForm(f => ({ ...f, icon: ic }))}
-                    style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${form.icon === ic ? '#a3e635' : '#222'}`, background: form.icon === ic ? 'rgba(163,230,53,0.08)' : 'transparent', color: form.icon === ic ? '#a3e635' : '#5b5b59', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <CategoryIcon name={ic} width={16} height={16} />
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label style={{ ...S.label, display: 'block', marginBottom: 6 }}>MONTHLY LIMIT (RM, optional)</label>
-              <input type="number" min="0" step="0.01" value={form.monthlyLimit} onChange={e => setForm(f => ({ ...f, monthlyLimit: e.target.value }))} placeholder="e.g. 500" style={S.input} />
-            </div>
-            <button type="submit" style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 8, padding: '11px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer', ...S.sans, marginTop: 4 }}>
-              Create Category
-            </button>
-          </form>
+          <CategoryForm
+            initial={{ name: '', icon: 'bag', type: 'expense', monthlyLimit: '' }}
+            onSubmit={addCategory}
+            submitLabel="Create Category"
+          />
         </Modal>
       )}
-    </div>
-  )
-}
 
-function CatRow({ cat, isLast, editId, setEditId, onSaveLimit, onDelete, deleting }: {
-  cat: Category
-  isLast: boolean
-  editId: string | null
-  setEditId: (id: string | null) => void
-  onSaveLimit: (id: string, limit: string) => void
-  onDelete: (id: string) => void
-  deleting: string | null
-}) {
-  const [limitVal, setLimitVal] = useState(cat.monthlyLimit?.toString() ?? '')
-  const isEditing = editId === cat.id
-
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 160px 36px', gap: 12, padding: '13px 20px', borderBottom: isLast ? 'none' : '1px solid #141414', alignItems: 'center' }}>
-      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a3e635' }}>
-        <CategoryIcon name={cat.icon as CatIconName} width={16} height={16} />
-      </div>
-      <span style={{ fontSize: 13, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif' }}>{cat.name}</span>
-      <div>
-        {isEditing ? (
-          <form onSubmit={e => { e.preventDefault(); onSaveLimit(cat.id, limitVal) }} style={{ display: 'flex', gap: 6 }}>
-            <input
-              autoFocus
-              type="number" min="0" step="0.01"
-              value={limitVal}
-              onChange={e => setLimitVal(e.target.value)}
-              placeholder="No limit"
-              style={{ flex: 1, background: '#0d0d0d', border: '1px solid #333', borderRadius: 6, padding: '4px 8px', fontSize: 12, color: '#f5f5f4', fontFamily: '"JetBrains Mono", monospace', outline: 'none', colorScheme: 'dark' }}
-            />
-            <button type="submit" style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>✓</button>
-            <button type="button" onClick={() => setEditId(null)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 6, padding: '4px 8px', fontSize: 11, color: '#5b5b59', cursor: 'pointer' }}>✕</button>
-          </form>
-        ) : (
-          <button onClick={() => { setLimitVal(cat.monthlyLimit?.toString() ?? ''); setEditId(cat.id) }}
-            style={{ background: 'transparent', border: '1px dashed #222', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: cat.monthlyLimit ? '#d0d0cf' : '#3a3a3a', fontFamily: '"JetBrains Mono", monospace', cursor: 'pointer', transition: 'border-color 140ms' }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = '#444'}
-            onMouseLeave={e => e.currentTarget.style.borderColor = '#222'}
-          >
-            {cat.monthlyLimit ? `RM ${cat.monthlyLimit.toFixed(0)}` : 'Set limit'}
-          </button>
-        )}
-      </div>
-      <button
-        onClick={() => onDelete(cat.id)}
-        disabled={deleting === cat.id}
-        style={{ background: 'transparent', border: 'none', cursor: deleting === cat.id ? 'default' : 'pointer', color: '#3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, padding: 4, transition: 'color 140ms' }}
-        onMouseEnter={e => { if (deleting !== cat.id) e.currentTarget.style.color = '#ef4444' }}
-        onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
-      >
-        <Icon name="close" width={14} height={14} />
-      </button>
+      {editCat && (
+        <Modal title="Edit Category" onClose={() => setEditCat(null)}>
+          <CategoryForm
+            initial={{ name: editCat.name, icon: editCat.icon as CatIconName, type: editCat.type, monthlyLimit: editCat.monthlyLimit?.toString() ?? '' }}
+            onSubmit={editCategory}
+            submitLabel="Save Changes"
+          />
+        </Modal>
+      )}
     </div>
   )
 }

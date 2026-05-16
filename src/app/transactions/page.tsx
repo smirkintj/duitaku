@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'reac
 import { useRouter, useSearchParams } from 'next/navigation'
 import SidebarClient from '@/components/finance/SidebarClient'
 import AddTransactionModal from '@/components/finance/AddTransactionModal'
+import EditTransactionModal from '@/components/finance/EditTransactionModal'
 import { Icon } from '@/components/finance/icons'
 
 interface Transaction {
@@ -20,6 +21,7 @@ interface Transaction {
 interface Category {
   id: string
   name: string
+  type: string
 }
 
 function prevMonth(m: string) {
@@ -62,6 +64,7 @@ function TransactionsContent() {
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'all' | 'expense' | 'income'>('all')
   const [showModal, setShowModal] = useState(false)
+  const [editTx, setEditTx] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -163,9 +166,9 @@ function TransactionsContent() {
 
         {/* List */}
         <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px', gap: 12, padding: '10px 20px', borderBottom: '1px solid #1a1a1a' }}>
-            {['DATE', 'MERCHANT', 'CATEGORY', 'AMOUNT', ''].map(h => (
-              <span key={h} style={S.label}>{h}</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '10px 20px', borderBottom: '1px solid #1a1a1a' }}>
+            {['DATE', 'MERCHANT', 'CATEGORY', 'AMOUNT', '', ''].map((h, i) => (
+              <span key={i} style={S.label}>{h}</span>
             ))}
           </div>
 
@@ -178,7 +181,7 @@ function TransactionsContent() {
               const cat = tx.categoryId ? catMap.get(tx.categoryId) : undefined
               const label = tx.merchant ?? tx.note ?? 'Unknown'
               return (
-                <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px', gap: 12, padding: '13px 20px', borderBottom: i < filtered.length - 1 ? '1px solid #141414' : 'none', alignItems: 'center' }}>
+                <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '13px 20px', borderBottom: i < filtered.length - 1 ? '1px solid #141414' : 'none', alignItems: 'center' }}>
                   <span style={{ fontSize: 11, color: '#7a7a78', ...S.mono }}>{fmtDate(tx.date)}</span>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                     <span style={{ fontSize: 13, color: '#f5f5f4', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
@@ -191,11 +194,21 @@ function TransactionsContent() {
                     {tx.type === 'income' ? '+' : '−'} RM {tx.amount.toFixed(2)}
                   </span>
                   <button
+                    onClick={() => setEditTx(tx)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, padding: 4, transition: 'color 140ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#a3e635' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
+                    title="Edit"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </button>
+                  <button
                     onClick={() => deleteTx(tx.id)}
                     disabled={deleting === tx.id}
                     style={{ background: 'transparent', border: 'none', cursor: deleting === tx.id ? 'default' : 'pointer', color: '#3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, padding: 4, transition: 'color 140ms' }}
                     onMouseEnter={e => { if (deleting !== tx.id) e.currentTarget.style.color = '#ef4444' }}
                     onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
+                    title="Delete"
                   >
                     <Icon name="close" width={14} height={14} />
                   </button>
@@ -214,6 +227,14 @@ function TransactionsContent() {
         <AddTransactionModal
           onClose={() => setShowModal(false)}
           onSuccess={() => { setShowModal(false); load() }}
+        />
+      )}
+      {editTx && (
+        <EditTransactionModal
+          tx={editTx}
+          categories={cats}
+          onClose={() => setEditTx(null)}
+          onSaved={() => { setEditTx(null); load() }}
         />
       )}
     </div>
