@@ -159,7 +159,7 @@ export default function Sidebar({ active, setActive, expanded, setExpanded }: Si
             fontFamily: '"JetBrains Mono", monospace',
           }}
         >
-          m
+          d
         </div>
         {expanded && (
           <span
@@ -171,7 +171,7 @@ export default function Sidebar({ active, setActive, expanded, setExpanded }: Si
               letterSpacing: '-0.02em',
             }}
           >
-            manapigi<span style={{ color: '#a3e635' }}>.</span>
+            duitaku<span style={{ color: '#a3e635' }}>.</span>
           </span>
         )}
       </div>

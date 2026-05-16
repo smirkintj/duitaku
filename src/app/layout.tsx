@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { JetBrains_Mono } from 'next/font/google'
+import PinGate from '@/components/finance/PinGate'
 import './globals.css'
 
 const jetbrainsMono = JetBrains_Mono({
@@ -17,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${GeistSans.className} ${jetbrainsMono.variable} h-full`}>
       <body style={{ background: '#0d0d0d', color: '#f5f5f4', margin: 0, height: '100%' }}>
-        {children}
+        <PinGate>{children}</PinGate>
       </body>
     </html>
   )

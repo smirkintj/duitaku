@@ -62,12 +62,12 @@ export default function SalarySetupCard() {
           fontFamily: '"JetBrains Mono", monospace',
         }}
       >
-        m
+        d
       </div>
 
       <div style={{ textAlign: 'center' }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif', margin: '0 0 8px' }}>
-          Welcome to manapigi.
+          Welcome to duitaku.
         </h1>
         <p style={{ fontSize: 14, color: '#7a7a78', fontFamily: '"Geist", -apple-system, sans-serif', margin: 0, lineHeight: 1.6 }}>
           To get started, let us know your monthly salary so we can track your spending.
