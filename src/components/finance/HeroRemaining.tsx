@@ -206,9 +206,8 @@ function SpendCurve({ data, dayOfMonth }: { data: number[]; dayOfMonth: number }
             y={CANVAS_H + LABEL_H - 3}
             textAnchor="middle"
             fill="#5b5b59"
-            fontSize={28}
+            fontSize={11}
             fontFamily='"JetBrains Mono", monospace'
-            style={{ fontSize: 28 }}
           >
             {d}
           </text>
