@@ -280,27 +280,25 @@ export default function BillsPage() {
             ))}
           </div>
 
-          {/* Main 2-column layout: bills left, BNPL right */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+          {/* Bills list */}
+          <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>Monthly Bills</span>
+              <span style={{ ...S.label }}>{paid.length} OF {bills.length} PAID</span>
+            </div>
 
-            {/* Bills list */}
-            <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
-              <div style={{ padding: '10px 16px', borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>Monthly Bills</span>
-                <span style={{ ...S.label }}>{paid.length} OF {bills.length} PAID</span>
+            {loading ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center', ...S.label }}>LOADING…</div>
+            ) : bills.length === 0 ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center' }}>
+                <div style={{ ...S.label, marginBottom: 8 }}>NO BILLS YET</div>
+                <button onClick={() => setShowAddBill(true)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '6px 14px', color: '#7a7a78', cursor: 'pointer', fontSize: 12, ...S.sans }}>
+                  Add your first bill
+                </button>
               </div>
-
-              {loading ? (
-                <div style={{ padding: '32px 16px', textAlign: 'center', ...S.label }}>LOADING…</div>
-              ) : bills.length === 0 ? (
-                <div style={{ padding: '32px 16px', textAlign: 'center' }}>
-                  <div style={{ ...S.label, marginBottom: 8 }}>NO BILLS YET</div>
-                  <button onClick={() => setShowAddBill(true)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '6px 14px', color: '#7a7a78', cursor: 'pointer', fontSize: 12, ...S.sans }}>
-                    Add your first bill
-                  </button>
-                </div>
-              ) : (
-                <>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
                   {unpaid.map((bill, i) => (
                     <BillRow
                       key={bill.id}
@@ -308,14 +306,16 @@ export default function BillsPage() {
                       onToggle={() => togglePaid(bill)}
                       onDelete={() => deleteBill(bill.id)}
                       toggling={toggling === bill.id}
-                      isLast={i === unpaid.length - 1 && paid.length === 0}
+                      col={i % 2 === 0 ? 'left' : 'right'}
                     />
                   ))}
-                  {paid.length > 0 && (
-                    <>
-                      <div style={{ padding: '6px 16px', background: '#0d0d0d', borderTop: '1px solid #141414', borderBottom: '1px solid #141414' }}>
-                        <span style={{ ...S.label }}>PAID</span>
-                      </div>
+                </div>
+                {paid.length > 0 && (
+                  <>
+                    <div style={{ padding: '6px 16px', background: '#0d0d0d', borderTop: '1px solid #141414', borderBottom: '1px solid #141414', gridColumn: '1/-1' }}>
+                      <span style={{ ...S.label }}>PAID</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
                       {paid.map((bill, i) => (
                         <BillRow
                           key={bill.id}
@@ -323,37 +323,41 @@ export default function BillsPage() {
                           onToggle={() => togglePaid(bill)}
                           onDelete={() => deleteBill(bill.id)}
                           toggling={toggling === bill.id}
-                          isLast={i === paid.length - 1}
+                          col={i % 2 === 0 ? 'left' : 'right'}
                           faded
                         />
                       ))}
-                    </>
-                  )}
-                </>
-              )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* BNPL section */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div>
+                <span style={{ ...S.label, display: 'block', marginBottom: 2 }}>BUY NOW PAY LATER</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>BNPL Plans</span>
+              </div>
+              <button onClick={() => setShowAddBnpl(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid #222', borderRadius: 9, padding: '0 14px', height: 34, cursor: 'pointer', fontSize: 12.5, fontWeight: 500, color: '#a3e635', ...S.sans }}>
+                + Add BNPL
+              </button>
             </div>
 
-            {/* BNPL section */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>BNPL Plans</span>
-                <button onClick={() => setShowAddBnpl(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '0 12px', height: 30, cursor: 'pointer', fontSize: 12, fontWeight: 500, color: '#a3e635', ...S.sans }}>
-                  + Add BNPL
+            {bnplLoading ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center', ...S.label }}>LOADING…</div>
+            ) : bnpl.length === 0 ? (
+              <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '32px 16px', textAlign: 'center' }}>
+                <div style={{ ...S.label, marginBottom: 8 }}>NO BNPL PLANS</div>
+                <button onClick={() => setShowAddBnpl(true)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '6px 14px', color: '#7a7a78', cursor: 'pointer', fontSize: 12, ...S.sans }}>
+                  Add a BNPL plan
                 </button>
               </div>
-
-              {bnplLoading ? (
-                <div style={{ padding: '32px 16px', textAlign: 'center', ...S.label }}>LOADING…</div>
-              ) : bnpl.length === 0 ? (
-                <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '32px 16px', textAlign: 'center' }}>
-                  <div style={{ ...S.label, marginBottom: 8 }}>NO BNPL PLANS</div>
-                  <button onClick={() => setShowAddBnpl(true)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '6px 14px', color: '#7a7a78', cursor: 'pointer', fontSize: 12, ...S.sans }}>
-                    Add a BNPL plan
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {bnpl.map(plan => {
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+              {bnpl.map(plan => {
                   const remaining = (plan.totalInstallments - plan.paidInstallments) * plan.installmentAmount
                   const progress = plan.paidInstallments / plan.totalInstallments
                   const now = new Date()
@@ -444,8 +448,7 @@ export default function BillsPage() {
                 })}
               </div>
             )}
-            </div>{/* end BNPL column */}
-          </div>{/* end 2-col grid */}
+          </div>
         </div>
 
         {/* Add Bill Modal */}
@@ -626,12 +629,12 @@ export default function BillsPage() {
   )
 }
 
-function BillRow({ bill, onToggle, onDelete, toggling, isLast, faded }: {
+function BillRow({ bill, onToggle, onDelete, toggling, col, faded }: {
   bill: Bill
   onToggle: () => void
   onDelete: () => void
   toggling: boolean
-  isLast: boolean
+  col: 'left' | 'right'
   faded?: boolean
 }) {
   const S = {
@@ -640,7 +643,7 @@ function BillRow({ bill, onToggle, onDelete, toggling, isLast, faded }: {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: isLast ? 'none' : '1px solid #141414', opacity: faded ? 0.4 : 1 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid #141414', borderRight: col === 'left' ? '1px solid #141414' : 'none', opacity: faded ? 0.4 : 1 }}>
       {/* Checkbox */}
       <button
         onClick={onToggle}
