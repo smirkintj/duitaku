@@ -50,10 +50,11 @@ export async function POST() {
     }
 
     // Fetch all account types in parallel (trade_hf = Trading Bot/DCA)
-    const [tradeData, mainData, tradeHfData] = await Promise.all([
+    const [tradeData, mainData, tradeHfData, botData] = await Promise.all([
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade'),
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=main'),
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade_hf').catch((e: Error) => ({ error: e.message })),
+      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v2/strategy/spot/bots?status=active&page=1&pageSize=50').catch((e: Error) => ({ error: e.message })),
     ])
 
     const allAccounts: { currency: string; balance: string }[] = [
@@ -63,7 +64,7 @@ export async function POST() {
     ]
 
     // Debug: expose raw account data temporarily
-    const _debug = { tradeData, mainData, tradeHfData }
+    const _debug = { tradeData, mainData, tradeHfData, botData }
 
     // Sum balances per currency
     const balanceMap: Record<string, number> = {}
