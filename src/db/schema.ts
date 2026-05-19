@@ -7,6 +7,24 @@ export const financeAccounts = pgTable('finance_accounts', {
   type: text('type').notNull().default('bank'), // cash | bank | credit
   currency: text('currency').notNull().default('MYR'),
   initialBalance: real('initial_balance').notNull().default(0),
+  // CC-specific fields (null for bank/cash)
+  creditLimit: real('credit_limit'),
+  currentOutstanding: real('current_outstanding'),  // manually updated, total owed right now
+  statementDueDay: integer('statement_due_day'),    // day of month payment is due (e.g. 15)
+  statementDay: integer('statement_day'),           // day of month statement cuts (e.g. 1)
+  lastFour: text('last_four'),                      // last 4 digits of card number
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const financeCcStatements = pgTable('finance_cc_statements', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  accountId: uuid('account_id').notNull().references(() => financeAccounts.id, { onDelete: 'cascade' }),
+  month: text('month').notNull(),                  // YYYY-MM
+  statementAmount: real('statement_amount').notNull(),
+  minimumPayment: real('minimum_payment').notNull().default(0),
+  paidAmount: real('paid_amount').notNull().default(0),
+  paidAt: timestamp('paid_at'),
+  notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
@@ -96,6 +114,14 @@ export const financeSavingsGoals = pgTable('finance_savings_goals', {
 // Relations
 export const financeAccountsRelations = relations(financeAccounts, ({ many }) => ({
   transactions: many(financeTransactions),
+  ccStatements: many(financeCcStatements),
+}))
+
+export const financeCcStatementsRelations = relations(financeCcStatements, ({ one }) => ({
+  account: one(financeAccounts, {
+    fields: [financeCcStatements.accountId],
+    references: [financeAccounts.id],
+  }),
 }))
 
 export const financeCategoriesRelations = relations(financeCategories, ({ many }) => ({
