@@ -4,8 +4,7 @@ import { financeInvestments, financeApiKeys } from '@/db/schema'
 import { eq, and } from 'drizzle-orm'
 
 function kucoinSign(secret: string, timestamp: string, method: string, path: string, body = '') {
-  const str = timestamp + method + path + body
-  return crypto.createHmac('sha256', secret).update(str).digest('base64')
+  return crypto.createHmac('sha256', secret).update(timestamp + method + path + body).digest('base64')
 }
 
 function kucoinPassphrase(secret: string, passphrase: string) {
@@ -14,33 +13,25 @@ function kucoinPassphrase(secret: string, passphrase: string) {
 
 async function kucoinFetch(apiKey: string, apiSecret: string, apiPassphrase: string, path: string) {
   const timestamp = Date.now().toString()
-  const sig = kucoinSign(apiSecret, timestamp, 'GET', path)
-  const passEncoded = kucoinPassphrase(apiSecret, apiPassphrase)
-
   const res = await fetch(`https://api.kucoin.com${path}`, {
     headers: {
       'KC-API-KEY': apiKey,
-      'KC-API-SIGN': sig,
+      'KC-API-SIGN': kucoinSign(apiSecret, timestamp, 'GET', path),
       'KC-API-TIMESTAMP': timestamp,
-      'KC-API-PASSPHRASE': passEncoded,
+      'KC-API-PASSPHRASE': kucoinPassphrase(apiSecret, apiPassphrase),
       'KC-API-KEY-VERSION': '2',
       'Content-Type': 'application/json',
     },
   })
-
   const json = await res.json()
-  if (json?.code && json.code !== '200000') {
-    throw new Error(`KuCoin error ${json.code}: ${json.msg}`)
-  }
+  if (json?.code && json.code !== '200000') throw new Error(`KuCoin error ${json.code}: ${json.msg}`)
   return json
 }
 
 export async function POST() {
   try {
-    // Load credentials
     const allKeys = await db.select().from(financeApiKeys)
     const keyMap = Object.fromEntries(allKeys.map(r => [r.key, r.value]))
-
     const apiKey = keyMap['kucoin_api_key']
     const apiSecret = keyMap['kucoin_api_secret']
     const apiPassphrase = keyMap['kucoin_api_passphrase']
@@ -49,19 +40,31 @@ export async function POST() {
       return Response.json({ error: 'KuCoin credentials not configured' }, { status: 400 })
     }
 
-    // Fetch all account types in parallel (trade_hf = Trading Bot/DCA)
-    const [tradeData, mainData, allAccountsData] = await Promise.all([
-      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade'),
+    // Fetch main + trade accounts (bot accounts not accessible via standard API — needs Strategy permission)
+    const [mainData, tradeData] = await Promise.all([
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=main'),
-      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts').catch((e: Error) => ({ error: e.message })),
+      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade'),
     ])
 
+    // Also try bot endpoint — only works if API key has Strategy permission
+    const botData = await kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v2/strategy/spot/bots?status=active&page=1&pageSize=50')
+      .catch(() => null)
+
     const allAccounts: { currency: string; balance: string }[] = [
-      ...(tradeData?.data ?? []),
       ...(mainData?.data ?? []),
+      ...(tradeData?.data ?? []),
     ]
 
-    const _debug = { allAccountsData }
+    // If bot data is available, sum invested amounts per currency
+    if (botData?.data?.items) {
+      for (const bot of botData.data.items) {
+        const currency = bot.investCurrency ?? 'USDT'
+        const invested = parseFloat(bot.totalInvestment ?? bot.investedAmount ?? '0')
+        if (invested > 0) {
+          allAccounts.push({ currency, balance: String(invested) })
+        }
+      }
+    }
 
     // Sum balances per currency
     const balanceMap: Record<string, number> = {}
@@ -78,31 +81,22 @@ export async function POST() {
     // Get USD→MYR rate
     let usdMyrRate = 4.45
     try {
-      const fxRes = await fetch('https://open.er-api.com/v6/latest/USD')
-      const fxData = await fxRes.json()
+      const fxData = await fetch('https://open.er-api.com/v6/latest/USD').then(r => r.json())
       if (fxData?.rates?.MYR) usdMyrRate = fxData.rates.MYR
-    } catch {
-      // fallback to hardcoded rate
-    }
+    } catch { /* fallback */ }
 
     // Fetch prices concurrently
     const holdings: { ticker: string; units: number; priceUSDT: number; valueMYR: number }[] = []
-
     await Promise.all(coins.map(async ([currency, balance]) => {
       let priceUSDT = 1
-
       if (currency !== 'USDT') {
         try {
-          const priceRes = await fetch(`https://api.kucoin.com/api/v1/market/stats?symbol=${currency}-USDT`)
-          const priceData = await priceRes.json()
+          const priceData = await fetch(`https://api.kucoin.com/api/v1/market/stats?symbol=${currency}-USDT`).then(r => r.json())
           const last = parseFloat(priceData?.data?.last ?? '0')
           if (last > 0) priceUSDT = last
           else return
-        } catch {
-          return
-        }
+        } catch { return }
       }
-
       holdings.push({ ticker: currency, units: balance, priceUSDT, valueMYR: balance * priceUSDT * usdMyrRate })
     }))
 
@@ -114,31 +108,20 @@ export async function POST() {
         .limit(1)
 
       if (existing.length > 0) {
-        await db.update(financeInvestments).set({
-          currentValue: h.valueMYR,
-          units: h.units,
-          lastSyncedAt: new Date(),
-        }).where(eq(financeInvestments.id, existing[0].id))
+        await db.update(financeInvestments).set({ currentValue: h.valueMYR, units: h.units, lastSyncedAt: new Date() })
+          .where(eq(financeInvestments.id, existing[0].id))
       } else {
         await db.insert(financeInvestments).values({
-          name: `${h.ticker} (KuCoin)`,
-          type: 'crypto',
-          provider: 'kucoin',
-          ticker: h.ticker,
-          units: h.units,
-          costBasis: 0,
-          currentValue: h.valueMYR,
-          currency: 'MYR',
-          autoSync: true,
-          lastSyncedAt: new Date(),
+          name: `${h.ticker} (KuCoin)`, type: 'crypto', provider: 'kucoin',
+          ticker: h.ticker, units: h.units, costBasis: 0, currentValue: h.valueMYR,
+          currency: 'MYR', autoSync: true, lastSyncedAt: new Date(),
         })
       }
       synced++
     }
 
-    return Response.json({ synced, holdings, _debug })
+    return Response.json({ synced, holdings, botApiAvailable: botData !== null })
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    return Response.json({ error: message }, { status: 500 })
+    return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })
   }
 }
