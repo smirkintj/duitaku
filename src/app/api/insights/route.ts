@@ -1,16 +1,26 @@
 import { db } from '@/db'
-import { financeTransactions, financeCategories, financeSalary, financeBills, financeBillPayments, financeBnpl, financeSavingsGoals, financeAccounts, financeCcStatements } from '@/db/schema'
+import { financeTransactions, financeCategories, financeSalary, financeBills, financeBillPayments, financeBnpl, financeSavingsGoals, financeAccounts, financeCcStatements, financeAiInsights } from '@/db/schema'
 import { and, gte, lte, desc, eq, inArray } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
-
-// Simple in-memory cache keyed by month
-const cache = new Map<string, { data: CoachData; ts: number }>()
-const CACHE_TTL = 1000 * 60 * 60 // 1 hour
 
 interface CoachData {
   summary: string
   bullets: { tone: string; text: string }[]
   plan: { step: number; title: string; amount: number; status: string; note: string }[]
+}
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const month = searchParams.get('month')
+  if (!month) return Response.json({ error: 'month required' }, { status: 400 })
+
+  const rows = await db.select().from(financeAiInsights).where(eq(financeAiInsights.month, month)).limit(1)
+  if (rows.length === 0) return Response.json({ stored: null })
+
+  return Response.json({
+    stored: JSON.parse(rows[0].data) as CoachData,
+    generatedAt: rows[0].generatedAt,
+  })
 }
 
 function monthRange(month: string): { start: string; end: string } {
@@ -43,13 +53,6 @@ export async function POST(request: Request) {
 
   const body = await request.json() as { month: string }
   const { month } = body
-
-  // Cache key includes a version so prompt changes bust old entries
-  const cacheKey = `v2:${month}`
-  const cached = cache.get(cacheKey)
-  if (cached && Date.now() - cached.ts < CACHE_TTL) {
-    return Response.json(cached.data)
-  }
 
   const { start, end } = monthRange(month)
 
@@ -215,7 +218,12 @@ Provide 3-4 bullets and 3-4 plan steps. Be specific with amounts and percentages
     data = JSON.parse(match[0])
   }
 
-  cache.set(cacheKey, { data, ts: Date.now() })
+  // Upsert: delete old row for this month then insert fresh
+  await db.delete(financeAiInsights).where(eq(financeAiInsights.month, month))
+  const [saved] = await db.insert(financeAiInsights).values({
+    month,
+    data: JSON.stringify(data),
+  }).returning()
 
-  return Response.json(data)
+  return Response.json({ ...data, generatedAt: saved.generatedAt })
 }

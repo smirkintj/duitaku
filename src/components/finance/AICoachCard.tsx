@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Icon } from './icons'
 import { ShootingStarLayer } from './celestial'
 
@@ -22,11 +22,11 @@ interface CoachData {
   bullets: Bullet[]
   plan: PlanStep[]
   noApiKey?: boolean
+  generatedAt?: string
 }
 
 interface AICoachCardProps {
   month: string // YYYY-MM
-  coach?: CoachData | null
 }
 
 const BULLET_COLORS: Record<string, string> = {
@@ -41,14 +41,34 @@ const STATUS_STYLES: Record<string, { color: string; label: string }> = {
   Optional: { color: '#5b5b59', label: 'OPTIONAL' },
 }
 
-export default function AICoachCard({ month, coach: initialCoach }: AICoachCardProps) {
-  const [coach, setCoach] = useState<CoachData | null>(initialCoach ?? null)
-  const [loading, setLoading] = useState(false)
+function fmtDate(iso: string) {
+  const d = new Date(iso)
+  return d.toLocaleString('en-MY', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+export default function AICoachCard({ month }: AICoachCardProps) {
+  const [coach, setCoach] = useState<CoachData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
   const [noApiKey, setNoApiKey] = useState(false)
 
-  const generate = async () => {
+  useEffect(() => {
+    setCoach(null)
+    setError('')
+    setNoApiKey(false)
     setLoading(true)
+    fetch(`/api/insights?month=${month}`)
+      .then((r) => r.json())
+      .then((data: { stored: CoachData | null; generatedAt?: string }) => {
+        if (data.stored) setCoach({ ...data.stored, generatedAt: data.generatedAt })
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [month])
+
+  const generate = async () => {
+    setGenerating(true)
     setError('')
     setNoApiKey(false)
     try {
@@ -57,7 +77,7 @@ export default function AICoachCard({ month, coach: initialCoach }: AICoachCardP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ month }),
       })
-      const data = await res.json() as CoachData & { error?: string }
+      const data = await res.json() as CoachData & { error?: string; generatedAt?: string }
       if (!res.ok) throw new Error(data.error ?? 'Request failed')
       if (data.noApiKey) {
         setNoApiKey(true)
@@ -67,7 +87,7 @@ export default function AICoachCard({ month, coach: initialCoach }: AICoachCardP
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate insights.')
     } finally {
-      setLoading(false)
+      setGenerating(false)
     }
   }
 
@@ -121,41 +141,28 @@ export default function AICoachCard({ month, coach: initialCoach }: AICoachCardP
             <span style={{ fontSize: 17, fontWeight: 600, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif' }}>
               AI Coach
             </span>
-            {coach && (
-              <span
-                style={{
-                  fontSize: 9,
-                  fontFamily: '"JetBrains Mono", monospace',
-                  color: '#a3e635',
-                  border: '1px solid rgba(163,230,53,0.4)',
-                  borderRadius: 4,
-                  padding: '2px 6px',
-                  letterSpacing: '0.08em',
-                }}
-              >
-                GENERATED
-              </span>
-            )}
           </div>
           <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.06em' }}>
-            {coach ? 'POWERED BY CLAUDE-SONNET' : 'AI-POWERED FINANCIAL INSIGHTS'}
+            {coach?.generatedAt
+              ? `LAST GENERATED ${fmtDate(coach.generatedAt).toUpperCase()}`
+              : 'AI-POWERED FINANCIAL INSIGHTS'}
           </span>
         </div>
         <button
           onClick={generate}
-          disabled={loading}
+          disabled={generating || loading}
           style={{
             background: 'transparent',
             border: '1px solid #1f1f1f',
             borderRadius: 8,
-            color: loading ? '#5b5b59' : '#7a7a78',
+            color: generating || loading ? '#5b5b59' : '#7a7a78',
             fontSize: 12,
             fontFamily: '"Geist", -apple-system, sans-serif',
             padding: '6px 12px',
-            cursor: loading ? 'not-allowed' : 'pointer',
+            cursor: generating || loading ? 'not-allowed' : 'pointer',
           }}
         >
-          {loading ? 'Generating…' : coach ? 'Regenerate' : 'Generate insights'}
+          {generating ? 'Generating…' : coach ? 'Regenerate' : 'Generate insights'}
         </button>
       </div>
 
@@ -197,44 +204,34 @@ export default function AICoachCard({ month, coach: initialCoach }: AICoachCardP
         </div>
       )}
 
-      {/* Empty state */}
-      {!coach && !loading && !error && !noApiKey && (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '40px 0',
-            position: 'relative',
-            zIndex: 1,
-          }}
-        >
-          <p style={{ fontSize: 14, color: '#5b5b59', fontFamily: '"Geist", -apple-system, sans-serif', margin: '0 0 8px' }}>
-            Get personalized financial insights powered by Claude AI.
-          </p>
-          <p style={{ fontSize: 12, color: '#3a3a3a', fontFamily: '"JetBrains Mono", monospace', margin: 0 }}>
-            Click "Generate insights" to analyze your spending for {month}
-          </p>
+      {/* Loading state (initial fetch) */}
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '40px 0', position: 'relative', zIndex: 1, color: '#3a3a3a', fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>
+          LOADING…
         </div>
       )}
 
-      {/* Loading state */}
-      {loading && (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '40px 0',
-            position: 'relative',
-            zIndex: 1,
-            color: '#7a7a78',
-            fontFamily: '"JetBrains Mono", monospace',
-            fontSize: 12,
-          }}
-        >
+      {/* Generating state */}
+      {generating && (
+        <div style={{ textAlign: 'center', padding: '40px 0', position: 'relative', zIndex: 1, color: '#7a7a78', fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>
           Analyzing your financial data…
         </div>
       )}
 
+      {/* Empty state */}
+      {!coach && !loading && !generating && !error && !noApiKey && (
+        <div style={{ textAlign: 'center', padding: '40px 0', position: 'relative', zIndex: 1 }}>
+          <p style={{ fontSize: 14, color: '#5b5b59', fontFamily: '"Geist", -apple-system, sans-serif', margin: '0 0 8px' }}>
+            Get personalized financial insights powered by Claude AI.
+          </p>
+          <p style={{ fontSize: 12, color: '#3a3a3a', fontFamily: '"JetBrains Mono", monospace', margin: 0 }}>
+            Click &quot;Generate insights&quot; to analyze your spending for {month}
+          </p>
+        </div>
+      )}
+
       {/* Body */}
-      {coach && (
+      {coach && !generating && (
         <div
           style={{
             display: 'grid',

@@ -111,6 +111,13 @@ export const financeSavingsGoals = pgTable('finance_savings_goals', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
+export const financeAiInsights = pgTable('finance_ai_insights', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  month: text('month').notNull(),   // YYYY-MM — one row per month
+  data: text('data').notNull(),     // JSON string of CoachData
+  generatedAt: timestamp('generated_at').defaultNow().notNull(),
+})
+
 // Relations
 export const financeAccountsRelations = relations(financeAccounts, ({ many }) => ({
   transactions: many(financeTransactions),
