@@ -30,6 +30,7 @@ const NAV_MAIN: NavItem[] = [
 
 const NAV_SECONDARY: NavItem[] = [
   { key: 'savings', label: 'Savings', icon: 'savings' },
+  { key: 'investments', label: 'Investments', icon: 'invest' },
   { key: 'categories', label: 'Categories', icon: 'cats' },
   { key: 'accounts', label: 'Accounts', icon: 'accounts' },
   { key: 'settings', label: 'Settings', icon: 'settings' },

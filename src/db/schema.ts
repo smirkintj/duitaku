@@ -118,6 +118,28 @@ export const financeAiInsights = pgTable('finance_ai_insights', {
   generatedAt: timestamp('generated_at').defaultNow().notNull(),
 })
 
+export const financeInvestments = pgTable('finance_investments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  type: text('type').notNull(), // 'epf' | 'asb' | 'versa' | 'crypto' | 'unit_trust' | 'other'
+  provider: text('provider'),
+  costBasis: real('cost_basis').default(0).notNull(),
+  currentValue: real('current_value').default(0).notNull(),
+  currency: text('currency').default('MYR').notNull(),
+  units: real('units'),
+  ticker: text('ticker'),
+  notes: text('notes'),
+  autoSync: boolean('auto_sync').default(false).notNull(),
+  lastSyncedAt: timestamp('last_synced_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const financeApiKeys = pgTable('finance_api_keys', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // Relations
 export const financeAccountsRelations = relations(financeAccounts, ({ many }) => ({
   transactions: many(financeTransactions),

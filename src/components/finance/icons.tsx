@@ -28,6 +28,7 @@ type IconName =
   | 'bills'
   | 'savings'
   | 'piggy'
+  | 'invest'
 
 type CategoryIconName =
   | 'bag'
@@ -210,6 +211,13 @@ export function Icon({ name, width = 20, height = 20, className, style }: NamedI
         <svg {...common}>
           <path d="M19 9c0-3.3-3.1-6-7-6S5 5.7 5 9c0 1.5.6 2.9 1.6 4H5l1 4h2v2h8v-2h2l1-4h-1.6C19.4 11.9 20 10.5 19 9z"/>
           <path d="M9 9h.01M20 9h2"/>
+        </svg>
+      )
+    case 'invest':
+      return (
+        <svg {...common}>
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+          <polyline points="16 7 22 7 22 13" />
         </svg>
       )
     default:

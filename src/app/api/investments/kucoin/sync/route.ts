@@ -1,0 +1,142 @@
+import crypto from 'crypto'
+import { db } from '@/db'
+import { financeInvestments, financeApiKeys } from '@/db/schema'
+import { eq, and } from 'drizzle-orm'
+
+function kucoinSign(secret: string, timestamp: string, method: string, path: string, body = '') {
+  const str = timestamp + method + path + body
+  return crypto.createHmac('sha256', secret).update(str).digest('base64')
+}
+
+function kucoinPassphrase(secret: string, passphrase: string) {
+  return crypto.createHmac('sha256', secret).update(passphrase).digest('base64')
+}
+
+async function kucoinFetch(apiKey: string, apiSecret: string, apiPassphrase: string, path: string) {
+  const timestamp = Date.now().toString()
+  const method = 'GET'
+  const sig = kucoinSign(apiSecret, timestamp, method, path)
+  const passEncoded = kucoinPassphrase(apiSecret, apiPassphrase)
+
+  const res = await fetch(`https://api.kucoin.com${path}`, {
+    headers: {
+      'KC-API-KEY': apiKey,
+      'KC-API-SIGN': sig,
+      'KC-API-TIMESTAMP': timestamp,
+      'KC-API-PASSPHRASE': passEncoded,
+      'KC-API-KEY-VERSION': '2',
+      'Content-Type': 'application/json',
+    },
+  })
+  return res.json()
+}
+
+export async function POST() {
+  // 1. Load credentials
+  const rows = await db.select().from(financeApiKeys).where(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (financeApiKeys as any).key.in(['kucoin_api_key', 'kucoin_api_secret', 'kucoin_api_passphrase'])
+  ).catch(() => null)
+
+  // Fallback query without in()
+  const allKeys = await db.select().from(financeApiKeys)
+  const keyMap = Object.fromEntries(allKeys.map(r => [r.key, r.value]))
+
+  const apiKey = keyMap['kucoin_api_key']
+  const apiSecret = keyMap['kucoin_api_secret']
+  const apiPassphrase = keyMap['kucoin_api_passphrase']
+
+  if (!apiKey || !apiSecret || !apiPassphrase) {
+    return Response.json({ error: 'KuCoin credentials not configured' }, { status: 400 })
+  }
+
+  // 3. Fetch trade + main accounts and merge
+  const [tradeData, mainData] = await Promise.all([
+    kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade'),
+    kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=main'),
+  ])
+
+  const allAccounts: { currency: string; balance: string }[] = [
+    ...(tradeData?.data ?? []),
+    ...(mainData?.data ?? []),
+  ]
+
+  // Deduplicate by currency (sum balances)
+  const balanceMap: Record<string, number> = {}
+  for (const acc of allAccounts) {
+    const bal = parseFloat(acc.balance) || 0
+    balanceMap[acc.currency] = (balanceMap[acc.currency] ?? 0) + bal
+  }
+
+  const STABLECOINS = new Set(['USDC', 'BUSD'])
+  // Filter dust (exclude stablecoins except USDT which we handle separately)
+  const coins = Object.entries(balanceMap)
+    .filter(([currency, balance]) => balance > 0.000001 && !STABLECOINS.has(currency))
+
+  // 7. Get USD→MYR rate
+  let usdMyrRate = 4.45
+  try {
+    const fxRes = await fetch('https://open.er-api.com/v6/latest/USD')
+    const fxData = await fxRes.json()
+    if (fxData?.rates?.MYR) usdMyrRate = fxData.rates.MYR
+  } catch {
+    // fallback
+  }
+
+  // 5/6. Fetch prices and build holdings
+  const holdings: { ticker: string; units: number; priceUSDT: number; valueMYR: number }[] = []
+
+  await Promise.all(coins.map(async ([currency, balance]) => {
+    let priceUSDT = 1
+
+    if (currency !== 'USDT') {
+      try {
+        const priceRes = await fetch(`https://api.kucoin.com/api/v1/market/stats?symbol=${currency}-USDT`)
+        const priceData = await priceRes.json()
+        const last = parseFloat(priceData?.data?.last ?? '0')
+        if (last > 0) priceUSDT = last
+        else return // skip if no price
+      } catch {
+        return // skip on error
+      }
+    }
+
+    const valueMYR = balance * priceUSDT * usdMyrRate
+    holdings.push({ ticker: currency, units: balance, priceUSDT, valueMYR })
+  }))
+
+  // 8. Upsert into financeInvestments
+  let synced = 0
+  for (const h of holdings) {
+    const existing = await db.select().from(financeInvestments)
+      .where(and(
+        eq(financeInvestments.ticker, h.ticker),
+        eq(financeInvestments.provider, 'kucoin')
+      ))
+      .limit(1)
+
+    if (existing.length > 0) {
+      await db.update(financeInvestments).set({
+        currentValue: h.valueMYR,
+        units: h.units,
+        lastSyncedAt: new Date(),
+      }).where(eq(financeInvestments.id, existing[0].id))
+    } else {
+      await db.insert(financeInvestments).values({
+        name: `${h.ticker} (KuCoin)`,
+        type: 'crypto',
+        provider: 'kucoin',
+        ticker: h.ticker,
+        units: h.units,
+        costBasis: 0,
+        currentValue: h.valueMYR,
+        currency: 'MYR',
+        autoSync: true,
+        lastSyncedAt: new Date(),
+      })
+    }
+    synced++
+  }
+
+  return Response.json({ synced, holdings })
+}
