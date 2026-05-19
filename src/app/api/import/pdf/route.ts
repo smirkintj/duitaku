@@ -1,23 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
-
-// pdfjs-dist legacy build for Node.js
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.mjs') as typeof import('pdfjs-dist')
+const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (buf: Buffer) => Promise<{ text: string }>
 
-// Disable worker in Node.js environment
-if (pdfjsLib.GlobalWorkerOptions) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = ''
-}
-
-// Best-effort regex parser for common statement formats (used when no API key)
 function parseTransactionsFromText(
   text: string,
 ): { date: string; merchant: string; amount: number; type: 'expense' | 'income' }[] {
   const results: { date: string; merchant: string; amount: number; type: 'expense' | 'income' }[] = []
 
-  // Match lines with: date, description, amount (optional CR sign)
-  // Supports formats like: "01/05/2025  GRAB FOOD  -45.00" or "01 MAY 2025  PAYMENT  1000.00 CR"
   const lineRe =
     /(\d{1,2}[\/\- ]\w{2,3}[\/\- ]\d{2,4}|\d{4}-\d{2}-\d{2})\s{2,}(.+?)\s{2,}(CR\s*)?([\d,]+\.\d{2})(\s*CR)?/gi
 
@@ -28,7 +18,6 @@ function parseTransactionsFromText(
     const isCredit = !!(match[3] || match[5])
     const amount = parseFloat(match[4].replace(/,/g, ''))
 
-    // Normalise date to YYYY-MM-DD
     let date = rawDate
     const isoMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
     if (!isoMatch) {
@@ -57,37 +46,30 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
-    const password = (formData.get('password') as string | null) ?? ''
 
     if (!file) {
       return Response.json({ error: 'No file provided' }, { status: 400 })
     }
 
     const arrayBuffer = await file.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
+    const buffer = Buffer.from(arrayBuffer)
 
-    // Load PDF with optional password
-    const loadingTask = pdfjsLib.getDocument({
-      data: uint8Array,
-      password: password || undefined,
-    } as Parameters<typeof pdfjsLib.getDocument>[0])
+    let fullText: string
+    try {
+      const data = await pdfParse(buffer)
+      fullText = data.text
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      return Response.json({ error: `Failed to read PDF: ${msg}` }, { status: 422 })
+    }
 
-    const pdf = await loadingTask.promise
-    let fullText = ''
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i)
-      const content = await page.getTextContent()
-      const pageText = content.items
-        .map((item) => ('str' in item ? (item as { str: string }).str : ''))
-        .join(' ')
-      fullText += pageText + '\n'
+    if (!fullText.trim()) {
+      return Response.json({ error: 'PDF has no selectable text. Try a different file.' }, { status: 422 })
     }
 
     let parsed: { date: string; merchant: string; amount: number; type: string }[]
 
     if (process.env.ANTHROPIC_API_KEY) {
-      // AI-powered extraction
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
       const message = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
@@ -106,20 +88,18 @@ ${fullText}`,
         ],
       })
 
-      const responseText =
-        message.content[0].type === 'text' ? message.content[0].text : ''
+      const responseText = message.content[0].type === 'text' ? message.content[0].text : ''
 
       try {
         parsed = JSON.parse(responseText)
       } catch {
         const match = responseText.match(/\[[\s\S]*\]/)
         if (!match) {
-          return Response.json({ error: 'Failed to parse Claude response' }, { status: 500 })
+          return Response.json({ error: 'Failed to parse AI response' }, { status: 500 })
         }
         parsed = JSON.parse(match[0])
       }
     } else {
-      // Fallback: regex-based extraction (best effort)
       parsed = parseTransactionsFromText(fullText)
       if (parsed.length === 0) {
         return Response.json(
@@ -129,7 +109,6 @@ ${fullText}`,
       }
     }
 
-    // Add importHash to each transaction
     const transactions = parsed.map((tx) => ({
       ...tx,
       importHash: createHash('sha256')
