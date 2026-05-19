@@ -1,6 +1,6 @@
 import { db } from '@/db'
-import { financeTransactions, financeCategories, financeSalary } from '@/db/schema'
-import { and, gte, lte, desc } from 'drizzle-orm'
+import { financeTransactions, financeCategories, financeSalary, financeBills, financeBillPayments, financeBnpl, financeSavingsGoals, financeAccounts, financeCcStatements } from '@/db/schema'
+import { and, gte, lte, desc, eq, inArray } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
 
 // Simple in-memory cache keyed by month
@@ -44,24 +44,29 @@ export async function POST(request: Request) {
   const body = await request.json() as { month: string }
   const { month } = body
 
-  // Check cache
-  const cached = cache.get(month)
+  // Cache key includes a version so prompt changes bust old entries
+  const cacheKey = `v2:${month}`
+  const cached = cache.get(cacheKey)
   if (cached && Date.now() - cached.ts < CACHE_TTL) {
     return Response.json(cached.data)
   }
 
   const { start, end } = monthRange(month)
 
-  // Fetch data in parallel
-  const [salary, currentTxs, categories] = await Promise.all([
+  // Fetch all data in parallel
+  const prior3 = prevMonths(month, 3)
+  const [salary, currentTxs, categories, bills, billPayments, bnplPlans, savingsGoals, accounts] = await Promise.all([
     db.select().from(financeSalary).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
     db.select().from(financeTransactions)
       .where(and(gte(financeTransactions.date, start), lte(financeTransactions.date, end))),
     db.select().from(financeCategories),
+    db.select().from(financeBills).where(eq(financeBills.isActive, true)),
+    db.select().from(financeBillPayments).where(eq(financeBillPayments.month, month)),
+    db.select().from(financeBnpl).where(eq(financeBnpl.isActive, true)),
+    db.select().from(financeSavingsGoals),
+    db.select().from(financeAccounts),
   ])
 
-  // Fetch prior 3 months transactions
-  const prior3 = prevMonths(month, 3)
   const priorTxsArr = await Promise.all(
     prior3.map(({ start: s, end: e }) =>
       db.select().from(financeTransactions)
@@ -69,9 +74,16 @@ export async function POST(request: Request) {
     )
   )
 
+  // CC statements for this month
+  const ccAccounts = accounts.filter((a) => a.type === 'credit')
+  const ccIds = ccAccounts.map((a) => a.id)
+  const ccStatements = ccIds.length > 0
+    ? await db.select().from(financeCcStatements).where(inArray(financeCcStatements.accountId, ccIds))
+    : []
+
   const salaryAmount = salary[0]?.amount ?? 0
 
-  // Build context
+  // Transactions
   const spent = currentTxs.filter((t) => t.type === 'expense').reduce((a, t) => a + t.amount, 0)
   const income = currentTxs.filter((t) => t.type === 'income').reduce((a, t) => a + t.amount, 0)
 
@@ -86,16 +98,84 @@ export async function POST(request: Request) {
     return { name: cat.name, spent: catSpent, prior3moAvg: avg, budget: cat.monthlyLimit }
   }).filter((c) => c.spent > 0)
 
-  const prompt = `You are an AI financial coach. Analyze this personal finance data and provide actionable insights.
+  // Bills
+  const paidBillIds = new Set(billPayments.map((p) => p.billId))
+  const billsSummary = bills.map((b) => ({
+    name: b.name,
+    amount: b.amount,
+    paid: paidBillIds.has(b.id),
+  }))
+  const totalBillsCommitment = bills.reduce((a, b) => a + b.amount, 0)
+  const totalBillsPaid = billsSummary.filter((b) => b.paid).reduce((a, b) => a + b.amount, 0)
+  const totalBillsUnpaid = billsSummary.filter((b) => !b.paid).reduce((a, b) => a + b.amount, 0)
+
+  // BNPL
+  const bnplSummary = bnplPlans.map((p) => {
+    const remaining = p.totalInstallments - p.paidInstallments
+    return {
+      merchant: p.merchant,
+      provider: p.provider,
+      installmentAmount: p.installmentAmount,
+      remainingInstallments: remaining,
+      remainingTotal: remaining * p.installmentAmount,
+    }
+  })
+  const totalMonthlyBnpl = bnplPlans.reduce((a, p) => a + p.installmentAmount, 0)
+
+  // CC
+  const ccSummary = ccAccounts.map((a) => {
+    const latestStmt = ccStatements
+      .filter((s) => s.accountId === a.id)
+      .sort((x, y) => y.month.localeCompare(x.month))[0]
+    const utilPct = a.creditLimit && a.currentOutstanding != null
+      ? Math.round((a.currentOutstanding / a.creditLimit) * 100)
+      : null
+    return {
+      name: a.name,
+      creditLimit: a.creditLimit,
+      outstanding: a.currentOutstanding,
+      utilisationPct: utilPct,
+      latestStatementAmount: latestStmt?.statementAmount ?? null,
+      minimumPayment: latestStmt?.minimumPayment ?? null,
+      unpaidAmount: latestStmt ? latestStmt.statementAmount - latestStmt.paidAmount : null,
+    }
+  })
+  const totalCcOutstanding = ccAccounts.reduce((a, c) => a + (c.currentOutstanding ?? 0), 0)
+
+  // Savings goals
+  const savingsSummary = savingsGoals.map((g) => ({
+    name: g.name,
+    target: g.targetAmount,
+    current: g.currentAmount,
+    pct: g.targetAmount ? Math.round((g.currentAmount / g.targetAmount) * 100) : null,
+  }))
+
+  const prompt = `You are an AI financial coach for a Malaysian. Analyze this comprehensive personal finance data and provide actionable insights.
 
 Month: ${month}
 Monthly Salary: RM ${salaryAmount.toFixed(2)}
-Total Spent: RM ${spent.toFixed(2)}
+Total Expenses Recorded: RM ${spent.toFixed(2)}
 Total Income Received: RM ${income.toFixed(2)}
-Remaining: RM ${Math.max(0, salaryAmount - spent).toFixed(2)}
+Remaining (after expenses): RM ${Math.max(0, salaryAmount - spent).toFixed(2)}
 
-Category Breakdown:
-${catSummaries.map((c) => `- ${c.name}: RM ${c.spent.toFixed(2)} spent (budget: ${c.budget ? `RM ${c.budget}` : 'none'}, 3mo avg: RM ${c.prior3moAvg.toFixed(2)})`).join('\n')}
+SPENDING BY CATEGORY:
+${catSummaries.map((c) => `- ${c.name}: RM ${c.spent.toFixed(2)} spent (budget: ${c.budget ? `RM ${c.budget}` : 'none'}, 3mo avg: RM ${c.prior3moAvg.toFixed(2)})`).join('\n') || '- No category data'}
+
+MONTHLY BILLS & COMMITMENTS (total commitment: RM ${totalBillsCommitment.toFixed(2)}):
+${billsSummary.length > 0 ? billsSummary.map((b) => `- ${b.name}: RM ${b.amount.toFixed(2)} — ${b.paid ? 'PAID' : 'UNPAID'}`).join('\n') : '- No bills configured'}
+Paid: RM ${totalBillsPaid.toFixed(2)} | Still unpaid this month: RM ${totalBillsUnpaid.toFixed(2)}
+
+BNPL / INSTALLMENTS (monthly commitment: RM ${totalMonthlyBnpl.toFixed(2)}):
+${bnplSummary.length > 0 ? bnplSummary.map((p) => `- ${p.merchant} (${p.provider}): RM ${p.installmentAmount.toFixed(2)}/month, ${p.remainingInstallments} installments left (RM ${p.remainingTotal.toFixed(2)} total remaining)`).join('\n') : '- No active BNPL plans'}
+
+CREDIT CARDS:
+${ccSummary.length > 0 ? ccSummary.map((c) => `- ${c.name}: outstanding RM ${(c.outstanding ?? 0).toFixed(2)}${c.creditLimit ? ` / RM ${c.creditLimit.toFixed(2)} limit (${c.utilisationPct}% utilised)` : ''}${c.latestStatementAmount ? `, latest statement RM ${c.latestStatementAmount.toFixed(2)}` : ''}${c.unpaidAmount && c.unpaidAmount > 0 ? `, RM ${c.unpaidAmount.toFixed(2)} unpaid` : ''}`).join('\n') : '- No credit cards configured'}
+Total CC outstanding: RM ${totalCcOutstanding.toFixed(2)}
+
+SAVINGS GOALS:
+${savingsSummary.length > 0 ? savingsSummary.map((g) => `- ${g.name}: RM ${g.current.toFixed(2)}${g.target ? ` / RM ${g.target.toFixed(2)} (${g.pct}%)` : ' (no target set)'}`).join('\n') : '- No savings goals configured'}
+
+TOTAL FIXED MONTHLY OUTFLOWS: RM ${(totalBillsCommitment + totalMonthlyBnpl).toFixed(2)} (bills + BNPL installments)
 
 Return ONLY a JSON object with this structure, no other text:
 {
@@ -135,7 +215,7 @@ Provide 3-4 bullets and 3-4 plan steps. Be specific with amounts and percentages
     data = JSON.parse(match[0])
   }
 
-  cache.set(month, { data, ts: Date.now() })
+  cache.set(cacheKey, { data, ts: Date.now() })
 
   return Response.json(data)
 }
