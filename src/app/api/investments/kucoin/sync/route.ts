@@ -53,7 +53,7 @@ export async function POST() {
     const [tradeData, mainData, tradeHfData] = await Promise.all([
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade'),
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=main'),
-      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade_hf'),
+      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade_hf').catch((e: Error) => ({ error: e.message })),
     ])
 
     const allAccounts: { currency: string; balance: string }[] = [
@@ -61,6 +61,9 @@ export async function POST() {
       ...(mainData?.data ?? []),
       ...(tradeHfData?.data ?? []),
     ]
+
+    // Debug: expose raw account data temporarily
+    const _debug = { tradeData, mainData, tradeHfData }
 
     // Sum balances per currency
     const balanceMap: Record<string, number> = {}
@@ -135,7 +138,7 @@ export async function POST() {
       synced++
     }
 
-    return Response.json({ synced, holdings })
+    return Response.json({ synced, holdings, _debug })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return Response.json({ error: message }, { status: 500 })
