@@ -265,94 +265,94 @@ export default function BillsPage() {
           </div>
         </div>
 
-        <div style={{ padding: '24px 32px 40px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ padding: '20px 32px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {[
-              { label: 'TOTAL BILLS', value: `${bills.length}`, sub: null },
-              { label: 'PAID', value: `${paid.length} / ${bills.length}`, sub: null },
-              { label: 'REMAINING', value: `RM ${unpaidTotal.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: null },
+              { label: 'TOTAL BILLS', value: `${bills.length}` },
+              { label: 'PAID', value: `${paid.length} / ${bills.length}` },
+              { label: 'REMAINING', value: `RM ${unpaidTotal.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
             ].map(s => (
-              <div key={s.label} style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '16px 20px' }}>
-                <div style={{ ...S.label, marginBottom: 6 }}>{s.label}</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: '#f5f5f4', ...S.sans, letterSpacing: '-0.02em' }}>{s.value}</div>
+              <div key={s.label} style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '12px 18px' }}>
+                <div style={{ ...S.label, marginBottom: 4 }}>{s.label}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', ...S.sans, letterSpacing: '-0.02em' }}>{s.value}</div>
               </div>
             ))}
           </div>
 
-          {/* Bills list */}
-          <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
-            <div style={{ padding: '14px 20px', borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>Monthly Bills</span>
-              <span style={{ ...S.label }}>{paid.length} OF {bills.length} PAID</span>
+          {/* Main 2-column layout: bills left, BNPL right */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+
+            {/* Bills list */}
+            <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>Monthly Bills</span>
+                <span style={{ ...S.label }}>{paid.length} OF {bills.length} PAID</span>
+              </div>
+
+              {loading ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', ...S.label }}>LOADING…</div>
+              ) : bills.length === 0 ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center' }}>
+                  <div style={{ ...S.label, marginBottom: 8 }}>NO BILLS YET</div>
+                  <button onClick={() => setShowAddBill(true)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '6px 14px', color: '#7a7a78', cursor: 'pointer', fontSize: 12, ...S.sans }}>
+                    Add your first bill
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {unpaid.map((bill, i) => (
+                    <BillRow
+                      key={bill.id}
+                      bill={bill}
+                      onToggle={() => togglePaid(bill)}
+                      onDelete={() => deleteBill(bill.id)}
+                      toggling={toggling === bill.id}
+                      isLast={i === unpaid.length - 1 && paid.length === 0}
+                    />
+                  ))}
+                  {paid.length > 0 && (
+                    <>
+                      <div style={{ padding: '6px 16px', background: '#0d0d0d', borderTop: '1px solid #141414', borderBottom: '1px solid #141414' }}>
+                        <span style={{ ...S.label }}>PAID</span>
+                      </div>
+                      {paid.map((bill, i) => (
+                        <BillRow
+                          key={bill.id}
+                          bill={bill}
+                          onToggle={() => togglePaid(bill)}
+                          onDelete={() => deleteBill(bill.id)}
+                          toggling={toggling === bill.id}
+                          isLast={i === paid.length - 1}
+                          faded
+                        />
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
             </div>
 
-            {loading ? (
-              <div style={{ padding: '40px 20px', textAlign: 'center', ...S.label }}>LOADING…</div>
-            ) : bills.length === 0 ? (
-              <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                <div style={{ ...S.label, marginBottom: 8 }}>NO BILLS YET</div>
-                <button onClick={() => setShowAddBill(true)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '8px 16px', color: '#7a7a78', cursor: 'pointer', fontSize: 12, ...S.sans }}>
-                  Add your first bill
+            {/* BNPL section */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>BNPL Plans</span>
+                <button onClick={() => setShowAddBnpl(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '0 12px', height: 30, cursor: 'pointer', fontSize: 12, fontWeight: 500, color: '#a3e635', ...S.sans }}>
+                  + Add BNPL
                 </button>
               </div>
-            ) : (
-              <>
-                {unpaid.map((bill, i) => (
-                  <BillRow
-                    key={bill.id}
-                    bill={bill}
-                    onToggle={() => togglePaid(bill)}
-                    onDelete={() => deleteBill(bill.id)}
-                    toggling={toggling === bill.id}
-                    isLast={i === unpaid.length - 1 && paid.length === 0}
-                  />
-                ))}
-                {paid.length > 0 && (
-                  <>
-                    <div style={{ padding: '8px 20px', background: '#0d0d0d', borderTop: '1px solid #141414', borderBottom: '1px solid #141414' }}>
-                      <span style={{ ...S.label }}>PAID</span>
-                    </div>
-                    {paid.map((bill, i) => (
-                      <BillRow
-                        key={bill.id}
-                        bill={bill}
-                        onToggle={() => togglePaid(bill)}
-                        onDelete={() => deleteBill(bill.id)}
-                        toggling={toggling === bill.id}
-                        isLast={i === paid.length - 1}
-                        faded
-                      />
-                    ))}
-                  </>
-                )}
-              </>
-            )}
-          </div>
 
-          {/* BNPL section */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <span style={S.label}>BUY NOW PAY LATER</span>
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>BNPL Plans</span>
-              </div>
-              <button onClick={() => setShowAddBnpl(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid #222', borderRadius: 9, padding: '0 14px', height: 34, cursor: 'pointer', fontSize: 12.5, fontWeight: 500, color: '#a3e635', ...S.sans }}>
-                + Add BNPL
-              </button>
-            </div>
-
-            {bnplLoading ? (
-              <div style={{ padding: '40px 20px', textAlign: 'center', ...S.label }}>LOADING…</div>
-            ) : bnpl.length === 0 ? (
-              <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '40px 20px', textAlign: 'center' }}>
-                <div style={{ ...S.label, marginBottom: 8 }}>NO BNPL PLANS</div>
-                <button onClick={() => setShowAddBnpl(true)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '8px 16px', color: '#7a7a78', cursor: 'pointer', fontSize: 12, ...S.sans }}>
-                  Add a BNPL plan
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+              {bnplLoading ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', ...S.label }}>LOADING…</div>
+              ) : bnpl.length === 0 ? (
+                <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '32px 16px', textAlign: 'center' }}>
+                  <div style={{ ...S.label, marginBottom: 8 }}>NO BNPL PLANS</div>
+                  <button onClick={() => setShowAddBnpl(true)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '6px 14px', color: '#7a7a78', cursor: 'pointer', fontSize: 12, ...S.sans }}>
+                    Add a BNPL plan
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {bnpl.map(plan => {
                   const remaining = (plan.totalInstallments - plan.paidInstallments) * plan.installmentAmount
                   const progress = plan.paidInstallments / plan.totalInstallments
@@ -444,7 +444,8 @@ export default function BillsPage() {
                 })}
               </div>
             )}
-          </div>
+            </div>{/* end BNPL column */}
+          </div>{/* end 2-col grid */}
         </div>
 
         {/* Add Bill Modal */}
@@ -639,55 +640,53 @@ function BillRow({ bill, onToggle, onDelete, toggling, isLast, faded }: {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: isLast ? 'none' : '1px solid #141414', opacity: faded ? 0.45 : 1 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: isLast ? 'none' : '1px solid #141414', opacity: faded ? 0.4 : 1 }}>
       {/* Checkbox */}
       <button
         onClick={onToggle}
         disabled={toggling}
         style={{
-          width: 20, height: 20,
-          borderRadius: 5,
+          width: 17, height: 17, borderRadius: 4,
           border: bill.paid ? '1.5px solid #a3e635' : '1.5px solid #333',
           background: bill.paid ? 'rgba(163,230,53,0.15)' : 'transparent',
           cursor: toggling ? 'default' : 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-          transition: 'all 160ms',
+          flexShrink: 0, transition: 'all 160ms',
         }}
       >
         {bill.paid && (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#a3e635" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="#a3e635" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M1.5 5l2.5 2.5 4.5-4.5" />
           </svg>
         )}
       </button>
 
       {/* Icon */}
-      <div style={{ width: 32, height: 32, borderRadius: 8, background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5b5b59', flexShrink: 0 }}>
-        <CategoryIcon name={bill.icon as Parameters<typeof CategoryIcon>[0]['name']} width={16} height={16} />
+      <div style={{ width: 26, height: 26, borderRadius: 6, background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5b5b59', flexShrink: 0 }}>
+        <CategoryIcon name={bill.icon as Parameters<typeof CategoryIcon>[0]['name']} width={13} height={13} />
       </div>
 
-      {/* Name + due */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 500, color: bill.paid ? '#5b5b59' : '#f5f5f4', ...S.sans, textDecoration: bill.paid ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {/* Name */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 500, color: bill.paid ? '#5b5b59' : '#f5f5f4', ...S.sans, textDecoration: bill.paid ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {bill.name}
-        </div>
-        <div style={{ ...S.label, marginTop: 2 }}>DUE {ordinal(bill.dueDay)}</div>
+        </span>
+        <span style={{ ...S.label, flexShrink: 0 }}>{ordinal(bill.dueDay)}</span>
       </div>
 
       {/* Amount */}
-      <span style={{ fontSize: 14, fontWeight: 600, color: bill.paid ? '#5b5b59' : '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif', letterSpacing: '-0.01em', flexShrink: 0 }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: bill.paid ? '#5b5b59' : '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif', flexShrink: 0 }}>
         RM {bill.amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </span>
 
       {/* Delete */}
       <button
         onClick={onDelete}
-        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#2a2a2a', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6, flexShrink: 0 }}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#222', display: 'flex', alignItems: 'center', padding: 2, borderRadius: 4, flexShrink: 0 }}
         onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }}
-        onMouseLeave={e => { e.currentTarget.style.color = '#2a2a2a' }}
+        onMouseLeave={e => { e.currentTarget.style.color = '#222' }}
       >
-        <Icon name="close" width={14} height={14} />
+        <Icon name="close" width={12} height={12} />
       </button>
     </div>
   )
