@@ -49,15 +49,17 @@ export async function POST() {
       return Response.json({ error: 'KuCoin credentials not configured' }, { status: 400 })
     }
 
-    // Fetch trade + main accounts in parallel
-    const [tradeData, mainData] = await Promise.all([
+    // Fetch all account types in parallel (trade_hf = Trading Bot/DCA)
+    const [tradeData, mainData, tradeHfData] = await Promise.all([
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade'),
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=main'),
+      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade_hf'),
     ])
 
     const allAccounts: { currency: string; balance: string }[] = [
       ...(tradeData?.data ?? []),
       ...(mainData?.data ?? []),
+      ...(tradeHfData?.data ?? []),
     ]
 
     // Sum balances per currency
