@@ -50,22 +50,18 @@ export async function POST() {
     }
 
     // Fetch all account types in parallel (trade_hf = Trading Bot/DCA)
-    const [tradeData, mainData, tradeHfData, botV1Data, marginData, contractData] = await Promise.all([
+    const [tradeData, mainData, allAccountsData] = await Promise.all([
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade'),
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=main'),
-      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade_hf').catch((e: Error) => ({ error: e.message })),
-      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/strategy/spot/bots?status=active&page=1&pageSize=50').catch((e: Error) => ({ error: e.message })),
-      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=margin').catch((e: Error) => ({ error: e.message })),
-      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=contract').catch((e: Error) => ({ error: e.message })),
+      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts').catch((e: Error) => ({ error: e.message })),
     ])
 
     const allAccounts: { currency: string; balance: string }[] = [
       ...(tradeData?.data ?? []),
       ...(mainData?.data ?? []),
-      ...(tradeHfData?.data ?? []),
     ]
 
-    const _debug = { tradeData, mainData, tradeHfData, botV1Data, marginData, contractData }
+    const _debug = { allAccountsData }
 
     // Sum balances per currency
     const balanceMap: Record<string, number> = {}
