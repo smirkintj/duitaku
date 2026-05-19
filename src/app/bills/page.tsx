@@ -86,6 +86,7 @@ export default function BillsPage() {
   // Modal states
   const [showAddBill, setShowAddBill] = useState(false)
   const [showAddBnpl, setShowAddBnpl] = useState(false)
+  const [editingBnpl, setEditingBnpl] = useState<BnplPlan | null>(null)
 
   // Add bill form
   const [billName, setBillName] = useState('')
@@ -151,6 +152,26 @@ export default function BillsPage() {
     setShowAddBill(false)
     setBillSaving(false)
     await loadBills()
+  }
+
+  async function saveBnplEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingBnpl) return
+    await fetch(`/api/bnpl/${editingBnpl.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        merchant: editingBnpl.merchant,
+        provider: editingBnpl.provider,
+        totalAmount: editingBnpl.totalAmount,
+        installmentAmount: editingBnpl.installmentAmount,
+        totalInstallments: editingBnpl.totalInstallments,
+        startMonth: editingBnpl.startMonth,
+        notes: editingBnpl.notes ?? null,
+      }),
+    })
+    setEditingBnpl(null)
+    await loadBnpl()
   }
 
   async function payBnpl(id: string) {
@@ -335,26 +356,56 @@ export default function BillsPage() {
                 {bnpl.map(plan => {
                   const remaining = (plan.totalInstallments - plan.paidInstallments) * plan.installmentAmount
                   const progress = plan.paidInstallments / plan.totalInstallments
+                  const now = new Date()
+                  const curIdx = now.getFullYear() * 12 + (now.getMonth() + 1)
+                  const [sy, sm] = plan.startMonth.split('-').map(Number)
+                  const startIdx = sy * 12 + sm
+                  const endIdx = startIdx + plan.totalInstallments - 1
+                  const activeThisMonth = curIdx >= startIdx && curIdx <= endIdx
+                  const notStartedYet = curIdx < startIdx
                   return (
-                    <div key={plan.id} style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div key={plan.id} style={{ background: '#111', border: `1px solid ${notStartedYet ? '#1f2a1a' : '#1a1a1a'}`, borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                        <div>
-                          <div style={{ marginBottom: 6 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: providerColor(plan.provider), border: `1px solid ${providerColor(plan.provider)}40`, borderRadius: 4, padding: '2px 6px' }}>
                               {providerLabel(plan.provider)}
                             </span>
+                            {notStartedYet && (
+                              <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: '#a3e635', border: '1px solid rgba(163,230,53,0.3)', borderRadius: 4, padding: '2px 6px' }}>
+                                STARTS {fmtMonth(plan.startMonth)}
+                              </span>
+                            )}
+                            {!notStartedYet && (
+                              <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.06em' }}>
+                                FROM {fmtMonth(plan.startMonth)}
+                              </span>
+                            )}
                           </div>
                           <div style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>{plan.merchant}</div>
                           {plan.notes && <div style={{ fontSize: 11, color: '#5b5b59', ...S.sans, marginTop: 2 }}>{plan.notes}</div>}
                         </div>
-                        <button
-                          onClick={() => deleteBnpl(plan.id)}
-                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', padding: 4, borderRadius: 6, flexShrink: 0 }}
-                          onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }}
-                          onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
-                        >
-                          <Icon name="close" width={14} height={14} />
-                        </button>
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <button
+                            onClick={() => setEditingBnpl({ ...plan })}
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', padding: 4, borderRadius: 6 }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#a3e635' }}
+                            onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
+                          >
+                            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deleteBnpl(plan.id)}
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', padding: 4, borderRadius: 6 }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }}
+                            onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
+                          >
+                            <Icon name="close" width={14} height={14} />
+                          </button>
+                        </div>
                       </div>
 
                       <div>
@@ -369,16 +420,18 @@ export default function BillsPage() {
 
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: '#f5f5f4', ...S.sans, letterSpacing: '-0.02em' }}>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: notStartedYet ? '#5b5b59' : '#f5f5f4', ...S.sans, letterSpacing: '-0.02em' }}>
                             RM {plan.installmentAmount.toFixed(2)}
                           </div>
-                          <div style={{ fontSize: 10, color: '#5b5b59', ...S.mono, letterSpacing: '0.06em' }}>PER INSTALLMENT</div>
+                          <div style={{ fontSize: 10, color: '#5b5b59', ...S.mono, letterSpacing: '0.06em' }}>
+                            {notStartedYet ? `STARTS IN ${startIdx - curIdx} MONTH${startIdx - curIdx > 1 ? 'S' : ''}` : activeThisMonth ? `INSTALLMENT ${curIdx - startIdx + 1}/${plan.totalInstallments}` : 'PER INSTALLMENT'}
+                          </div>
                         </div>
                         {plan.paidInstallments < plan.totalInstallments ? (
                           <button
                             onClick={() => payBnpl(plan.id)}
                             disabled={payingBnpl === plan.id}
-                            style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: payingBnpl === plan.id ? 'default' : 'pointer', fontSize: 12.5, fontWeight: 600, ...S.sans, opacity: payingBnpl === plan.id ? 0.6 : 1 }}
+                            style={{ background: activeThisMonth ? '#a3e635' : '#1a1a1a', color: activeThisMonth ? '#0d0d0d' : '#5b5b59', border: activeThisMonth ? 'none' : '1px solid #222', borderRadius: 8, padding: '8px 16px', cursor: payingBnpl === plan.id ? 'default' : 'pointer', fontSize: 12.5, fontWeight: 600, ...S.sans, opacity: payingBnpl === plan.id ? 0.6 : 1 }}
                           >
                             {payingBnpl === plan.id ? 'Paying…' : `Pay RM ${plan.installmentAmount.toFixed(2)}`}
                           </button>
@@ -448,6 +501,61 @@ export default function BillsPage() {
                   style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '11px 0', cursor: billSaving ? 'default' : 'pointer', fontSize: 14, fontWeight: 600, ...S.sans, opacity: billSaving ? 0.7 : 1, marginTop: 4 }}
                 >
                   {billSaving ? 'Adding…' : 'Add Bill'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit BNPL Modal */}
+        {editingBnpl && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+            <div style={{ background: '#111', border: '1px solid #222', borderRadius: 16, padding: 28, width: 460, maxWidth: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.6)', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+                <span style={{ fontSize: 16, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>Edit BNPL Plan</span>
+                <button onClick={() => setEditingBnpl(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#5b5b59', padding: 4 }}>
+                  <Icon name="close" width={18} height={18} />
+                </button>
+              </div>
+              <form onSubmit={saveBnplEdit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>MERCHANT</label>
+                  <input value={editingBnpl.merchant} onChange={e => setEditingBnpl(p => p && ({ ...p, merchant: e.target.value }))} style={inputStyle} required />
+                </div>
+                <div>
+                  <label style={labelStyle}>PROVIDER</label>
+                  <select value={editingBnpl.provider} onChange={e => setEditingBnpl(p => p && ({ ...p, provider: e.target.value }))} style={{ ...inputStyle }}>
+                    <option value="shopee">Shopee Pay Later</option>
+                    <option value="tiktok">TikTok Pay Later</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>TOTAL AMOUNT (RM)</label>
+                    <input type="number" value={editingBnpl.totalAmount} onChange={e => setEditingBnpl(p => p && ({ ...p, totalAmount: parseFloat(e.target.value) }))} min="0" step="0.01" style={inputStyle} required />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>INSTALLMENT (RM)</label>
+                    <input type="number" value={editingBnpl.installmentAmount} onChange={e => setEditingBnpl(p => p && ({ ...p, installmentAmount: parseFloat(e.target.value) }))} min="0" step="0.01" style={inputStyle} required />
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>NO. OF INSTALLMENTS</label>
+                    <input type="number" value={editingBnpl.totalInstallments} onChange={e => setEditingBnpl(p => p && ({ ...p, totalInstallments: parseInt(e.target.value) }))} min="1" style={inputStyle} required />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>START MONTH</label>
+                    <input type="month" value={editingBnpl.startMonth} onChange={e => setEditingBnpl(p => p && ({ ...p, startMonth: e.target.value }))} style={inputStyle} required />
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>NOTES (OPTIONAL)</label>
+                  <input value={editingBnpl.notes ?? ''} onChange={e => setEditingBnpl(p => p && ({ ...p, notes: e.target.value || null }))} placeholder="Optional notes" style={inputStyle} />
+                </div>
+                <button type="submit" style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '11px 0', cursor: 'pointer', fontSize: 14, fontWeight: 600, ...S.sans, marginTop: 4 }}>
+                  Save Changes
                 </button>
               </form>
             </div>

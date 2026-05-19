@@ -112,18 +112,34 @@ export async function POST(request: Request) {
   const totalBillsPaid = billsSummary.filter((b) => b.paid).reduce((a, b) => a + b.amount, 0)
   const totalBillsUnpaid = billsSummary.filter((b) => !b.paid).reduce((a, b) => a + b.amount, 0)
 
-  // BNPL
+  // BNPL — only count plans whose installment window covers the current month
+  function monthIndex(m: string) {
+    const [y, mo] = m.split('-').map(Number)
+    return y * 12 + mo
+  }
+  const currentIdx = monthIndex(month)
+
   const bnplSummary = bnplPlans.map((p) => {
+    const startIdx = monthIndex(p.startMonth)
+    const endIdx = startIdx + p.totalInstallments - 1
+    const activeThisMonth = currentIdx >= startIdx && currentIdx <= endIdx
+    const installmentNumber = activeThisMonth ? currentIdx - startIdx + 1 : null
     const remaining = p.totalInstallments - p.paidInstallments
+    const monthsUntilStart = startIdx > currentIdx ? startIdx - currentIdx : 0
     return {
       merchant: p.merchant,
       provider: p.provider,
       installmentAmount: p.installmentAmount,
+      totalInstallments: p.totalInstallments,
       remainingInstallments: remaining,
       remainingTotal: remaining * p.installmentAmount,
+      startMonth: p.startMonth,
+      activeThisMonth,
+      installmentNumber,
+      monthsUntilStart,
     }
   })
-  const totalMonthlyBnpl = bnplPlans.reduce((a, p) => a + p.installmentAmount, 0)
+  const totalMonthlyBnpl = bnplSummary.filter(p => p.activeThisMonth).reduce((a, p) => a + p.installmentAmount, 0)
 
   // CC
   const ccSummary = ccAccounts.map((a) => {
@@ -168,8 +184,13 @@ MONTHLY BILLS & COMMITMENTS (total commitment: RM ${totalBillsCommitment.toFixed
 ${billsSummary.length > 0 ? billsSummary.map((b) => `- ${b.name}: RM ${b.amount.toFixed(2)} — ${b.paid ? 'PAID' : 'UNPAID'}`).join('\n') : '- No bills configured'}
 Paid: RM ${totalBillsPaid.toFixed(2)} | Still unpaid this month: RM ${totalBillsUnpaid.toFixed(2)}
 
-BNPL / INSTALLMENTS (monthly commitment: RM ${totalMonthlyBnpl.toFixed(2)}):
-${bnplSummary.length > 0 ? bnplSummary.map((p) => `- ${p.merchant} (${p.provider}): RM ${p.installmentAmount.toFixed(2)}/month, ${p.remainingInstallments} installments left (RM ${p.remainingTotal.toFixed(2)} total remaining)`).join('\n') : '- No active BNPL plans'}
+BNPL / INSTALLMENTS (this month's commitment: RM ${totalMonthlyBnpl.toFixed(2)}):
+${bnplSummary.length > 0 ? bnplSummary.map((p) => {
+  if (!p.activeThisMonth && p.monthsUntilStart > 0) {
+    return `- ${p.merchant} (${p.provider}): starts in ${p.monthsUntilStart} month(s) — RM ${p.installmentAmount.toFixed(2)}/month for ${p.totalInstallments} installments (NOT due this month)`
+  }
+  return `- ${p.merchant} (${p.provider}): installment ${p.installmentNumber}/${p.totalInstallments} due this month — RM ${p.installmentAmount.toFixed(2)}, ${p.remainingInstallments} installments left (RM ${p.remainingTotal.toFixed(2)} total remaining)`
+}).join('\n') : '- No BNPL plans'}
 
 CREDIT CARDS:
 ${ccSummary.length > 0 ? ccSummary.map((c) => `- ${c.name}: outstanding RM ${(c.outstanding ?? 0).toFixed(2)}${c.creditLimit ? ` / RM ${c.creditLimit.toFixed(2)} limit (${c.utilisationPct}% utilised)` : ''}${c.latestStatementAmount ? `, latest statement RM ${c.latestStatementAmount.toFixed(2)}` : ''}${c.unpaidAmount && c.unpaidAmount > 0 ? `, RM ${c.unpaidAmount.toFixed(2)} unpaid` : ''}`).join('\n') : '- No credit cards configured'}
