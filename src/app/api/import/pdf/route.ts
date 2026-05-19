@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (buf: Buffer) => Promise<{ text: string }>
+const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (buf: Buffer, opts?: { password?: string }) => Promise<{ text: string }>
 
 function parseTransactionsFromText(
   text: string,
@@ -51,12 +51,14 @@ export async function POST(request: Request) {
       return Response.json({ error: 'No file provided' }, { status: 400 })
     }
 
+    const password = (formData.get('password') as string | null) ?? undefined
+
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
     let fullText: string
     try {
-      const data = await pdfParse(buffer)
+      const data = await pdfParse(buffer, password ? { password } : undefined)
       fullText = data.text
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
