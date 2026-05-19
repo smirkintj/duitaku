@@ -23,15 +23,15 @@ const NAV_MAIN: NavItem[] = [
   { key: 'add', label: 'Add', icon: 'add' },
   { key: 'transactions', label: 'Transactions', icon: 'tx' },
   { key: 'bills', label: 'Bills', icon: 'bills' },
-  { key: 'trends', label: 'Trends', icon: 'trends', disabled: true },
+  { key: 'trends', label: 'Trends', icon: 'trends' },
   { key: 'import', label: 'Import', icon: 'import' },
-  { key: 'ai', label: 'AI Coach', icon: 'ai', disabled: true },
+  { key: 'ai', label: 'AI Coach', icon: 'ai', pill: 'AI' },
 ]
 
 const NAV_SECONDARY: NavItem[] = [
   { key: 'savings', label: 'Savings', icon: 'savings' },
   { key: 'categories', label: 'Categories', icon: 'cats' },
-  { key: 'accounts', label: 'Accounts', icon: 'accounts', disabled: true },
+  { key: 'accounts', label: 'Accounts', icon: 'accounts' },
   { key: 'settings', label: 'Settings', icon: 'settings' },
 ]
 
