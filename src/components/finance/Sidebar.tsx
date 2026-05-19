@@ -15,6 +15,7 @@ interface NavItem {
   label: string
   icon: Parameters<typeof Icon>[0]['name']
   pill?: string
+  disabled?: boolean
 }
 
 const NAV_MAIN: NavItem[] = [
@@ -22,15 +23,15 @@ const NAV_MAIN: NavItem[] = [
   { key: 'add', label: 'Add', icon: 'add' },
   { key: 'transactions', label: 'Transactions', icon: 'tx' },
   { key: 'bills', label: 'Bills', icon: 'bills' },
-  { key: 'trends', label: 'Trends', icon: 'trends' },
+  { key: 'trends', label: 'Trends', icon: 'trends', disabled: true },
   { key: 'import', label: 'Import', icon: 'import' },
-  { key: 'ai', label: 'AI Coach', icon: 'ai', pill: 'AI' },
+  { key: 'ai', label: 'AI Coach', icon: 'ai', disabled: true },
 ]
 
 const NAV_SECONDARY: NavItem[] = [
   { key: 'savings', label: 'Savings', icon: 'savings' },
   { key: 'categories', label: 'Categories', icon: 'cats' },
-  { key: 'accounts', label: 'Accounts', icon: 'accounts' },
+  { key: 'accounts', label: 'Accounts', icon: 'accounts', disabled: true },
   { key: 'settings', label: 'Settings', icon: 'settings' },
 ]
 
@@ -46,11 +47,12 @@ function NavButton({
   onClick: () => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const disabled = !!item.disabled
 
   return (
     <button
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
+      onClick={disabled ? undefined : onClick}
+      onMouseEnter={() => !disabled && setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         position: 'relative',
@@ -62,17 +64,18 @@ function NavButton({
         justifyContent: expanded ? 'flex-start' : 'center',
         borderRadius: 8,
         border: 'none',
-        cursor: 'pointer',
+        cursor: disabled ? 'default' : 'pointer',
         background: active
           ? 'rgba(163,230,53,0.08)'
           : hovered
             ? 'rgba(255,255,255,0.03)'
             : 'transparent',
-        color: active ? '#a3e635' : hovered ? '#d0d0cf' : '#7a7a78',
+        color: disabled ? '#3a3a38' : active ? '#a3e635' : hovered ? '#d0d0cf' : '#7a7a78',
         transition: 'background 160ms, color 160ms',
         outline: 'none',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
+        opacity: disabled ? 0.5 : 1,
       }}
     >
       {active && (
@@ -95,7 +98,22 @@ function NavButton({
           <span style={{ fontSize: 13.5, fontFamily: '"Geist", -apple-system, sans-serif', fontWeight: 500 }}>
             {item.label}
           </span>
-          {item.pill && (
+          {disabled ? (
+            <span
+              style={{
+                marginLeft: 'auto',
+                fontSize: 9,
+                fontFamily: '"JetBrains Mono", monospace',
+                color: '#3a3a38',
+                border: '1px solid #2a2a2a',
+                borderRadius: 4,
+                padding: '1px 5px',
+                letterSpacing: '0.06em',
+              }}
+            >
+              SOON
+            </span>
+          ) : item.pill ? (
             <span
               style={{
                 marginLeft: 'auto',
@@ -110,7 +128,7 @@ function NavButton({
             >
               {item.pill}
             </span>
-          )}
+          ) : null}
         </>
       )}
     </button>
