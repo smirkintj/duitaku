@@ -57,15 +57,15 @@ export default function AICoachCard({ month, coach: initialCoach }: AICoachCardP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ month }),
       })
-      if (!res.ok) throw new Error('Failed to generate insights')
-      const data = await res.json() as CoachData
+      const data = await res.json() as CoachData & { error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Request failed')
       if (data.noApiKey) {
         setNoApiKey(true)
       } else {
         setCoach(data)
       }
-    } catch {
-      setError('Failed to generate insights. Check your connection and try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate insights.')
     } finally {
       setLoading(false)
     }

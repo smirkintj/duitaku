@@ -110,11 +110,17 @@ Return ONLY a JSON object with this structure, no other text:
 
 Provide 3-4 bullets and 3-4 plan steps. Be specific with amounts and percentages.`
 
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    messages: [{ role: 'user', content: prompt }],
-  })
+  let message
+  try {
+    message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: prompt }],
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return Response.json({ error: msg }, { status: 502 })
+  }
 
   const responseText = message.content[0].type === 'text' ? message.content[0].text : '{}'
 
