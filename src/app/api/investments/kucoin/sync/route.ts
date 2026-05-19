@@ -1,3 +1,5 @@
+export const preferredRegion = 'sin1' // Singapore — KuCoin blocks US IPs
+
 import crypto from 'crypto'
 import { db } from '@/db'
 import { financeInvestments, financeApiKeys } from '@/db/schema'
