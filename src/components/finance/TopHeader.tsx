@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Icon } from './icons'
 import { BreathingDot } from './celestial'
 import { formatRM } from '@/lib/finance-utils'
+import { usePrivacyMode } from '@/lib/privacy'
 
 interface TopHeaderProps {
   remaining: number
@@ -43,9 +44,29 @@ function greeting() {
   return 'Good evening'
 }
 
+function EyeIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+      <circle cx={12} cy={12} r={3} />
+    </svg>
+  )
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <line x1={1} y1={1} x2={23} y2={23} />
+    </svg>
+  )
+}
+
 export default function TopHeader({ remaining, month, onAdd, onPayday, hasPaidThisMonth }: TopHeaderProps) {
   const router = useRouter()
   const monthLabel = formatMonthLabel(month)
+  const [hidden, togglePrivacy] = usePrivacyMode()
 
   const goToPrev = () => router.push(`/?m=${prevMonth(month)}`)
   const goToNext = () => router.push(`/?m=${nextMonth(month)}`)
@@ -174,15 +195,36 @@ export default function TopHeader({ remaining, month, onAdd, onPayday, hasPaidTh
               style={{
                 fontSize: 15,
                 fontWeight: 700,
-                fontFamily: '"Geist", -apple-system, sans-serif',
+                fontFamily: hidden ? '"JetBrains Mono", monospace' : '"Geist", -apple-system, sans-serif',
                 color: '#a3e635',
                 letterSpacing: '-0.02em',
               }}
             >
-              RM {formatRM(remaining)}
+              {hidden ? '••••••' : `RM ${formatRM(remaining)}`}
             </span>
           </div>
         </div>
+
+        {/* Privacy toggle */}
+        <button
+          onClick={togglePrivacy}
+          title={hidden ? 'Show amounts' : 'Hide amounts'}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 9,
+            border: `1px solid ${hidden ? 'rgba(163,230,53,0.3)' : '#1f1f1f'}`,
+            background: hidden ? 'rgba(163,230,53,0.06)' : 'transparent',
+            color: hidden ? '#a3e635' : '#7a7a78',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 160ms',
+          }}
+        >
+          {hidden ? <EyeOffIcon /> : <EyeIcon />}
+        </button>
 
         {/* Search */}
         <button

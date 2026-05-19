@@ -4,6 +4,7 @@ import React from 'react'
 import { formatRM } from '@/lib/finance-utils'
 import { Icon } from './icons'
 import { Starfield, OrbitDot, PulseHalo } from './celestial'
+import { usePrivacyMode } from '@/lib/privacy'
 
 interface HeroRemainingProps {
   remaining: number
@@ -204,6 +205,7 @@ export default function HeroRemaining({
   dailySpend,
   month,
 }: HeroRemainingProps) {
+  const [hidden] = usePrivacyMode()
   const monthLabel = new Date(month + '-01').toLocaleString('en-MY', { month: 'short', year: 'numeric' }).toUpperCase()
   const rmStr = formatRM(remaining)
   const dotIdx = rmStr.indexOf('.')
@@ -278,51 +280,58 @@ export default function HeroRemaining({
             </span>
             <span
               style={{
-                fontFamily: '"Geist", -apple-system, sans-serif',
+                fontFamily: hidden ? '"JetBrains Mono", monospace' : '"Geist", -apple-system, sans-serif',
                 fontWeight: 700,
-                fontSize: 88,
+                fontSize: hidden ? 64 : 88,
                 color: '#f5f5f4',
-                letterSpacing: '-3.2px',
+                letterSpacing: hidden ? '0.1em' : '-3.2px',
                 lineHeight: 1,
                 fontVariantNumeric: 'tabular-nums',
+                transition: 'font-size 200ms',
               }}
             >
-              {intPart}
+              {hidden ? '••••••' : intPart}
             </span>
-            <span
-              style={{
-                fontFamily: '"Geist", -apple-system, sans-serif',
-                fontWeight: 500,
-                fontSize: 42,
-                color: '#5b5b59',
-                lineHeight: 1,
-                alignSelf: 'flex-end',
-                marginBottom: 6,
-              }}
-            >
-              {decPart}
-            </span>
+            {!hidden && (
+              <span
+                style={{
+                  fontFamily: '"Geist", -apple-system, sans-serif',
+                  fontWeight: 500,
+                  fontSize: 42,
+                  color: '#5b5b59',
+                  lineHeight: 1,
+                  alignSelf: 'flex-end',
+                  marginBottom: 6,
+                }}
+              >
+                {decPart}
+              </span>
+            )}
           </div>
 
           {/* Subline */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
             <span style={{ fontSize: 13, color: '#a0a09e', fontFamily: '"Geist", -apple-system, sans-serif' }}>
-              of RM {formatRM(salary)} salary
+              {hidden ? 'of •••••• salary' : `of RM ${formatRM(salary)} salary`}
             </span>
-            <span style={{ color: '#2a2a2a', fontSize: 12 }}>·</span>
-            <span
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 3,
-                fontFamily: '"JetBrains Mono", monospace',
-                fontSize: 11,
-                color: pacingAhead ? '#ef4444' : '#a3e635',
-              }}
-            >
-              <Icon name={pacingAhead ? 'arrowUp' : 'arrowDown'} width={12} height={12} />
-              RM {formatRM(Math.abs(paceDelta))} {pacingAhead ? 'ahead of pace' : 'under pace'}
-            </span>
+            {!hidden && (
+              <>
+                <span style={{ color: '#2a2a2a', fontSize: 12 }}>·</span>
+                <span
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 3,
+                    fontFamily: '"JetBrains Mono", monospace',
+                    fontSize: 11,
+                    color: pacingAhead ? '#ef4444' : '#a3e635',
+                  }}
+                >
+                  <Icon name={pacingAhead ? 'arrowUp' : 'arrowDown'} width={12} height={12} />
+                  RM {formatRM(Math.abs(paceDelta))} {pacingAhead ? 'ahead of pace' : 'under pace'}
+                </span>
+              </>
+            )}
           </div>
         </div>
 

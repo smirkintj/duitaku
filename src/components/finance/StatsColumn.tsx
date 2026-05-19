@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { formatRM } from '@/lib/finance-utils'
+import { usePrivacyMode } from '@/lib/privacy'
 
 interface StatsColumnProps {
   income: number
@@ -18,7 +19,7 @@ interface StatCardProps {
   delta?: { label: string; tone: 'lime' | 'warn' | 'danger' }
 }
 
-function StatCard({ eyebrow, amount, caption, delta }: StatCardProps) {
+function StatCard({ eyebrow, amount, caption, delta, hidden }: StatCardProps & { hidden?: boolean }) {
   const rmStr = formatRM(amount)
   const dotIdx = rmStr.indexOf('.')
   const intPart = dotIdx >= 0 ? rmStr.slice(0, dotIdx) : rmStr
@@ -71,40 +72,23 @@ function StatCard({ eyebrow, amount, caption, delta }: StatCardProps) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', lineHeight: 1, gap: 1 }}>
-        <span
-          style={{
-            fontSize: 12,
-            fontFamily: '"JetBrains Mono", monospace',
-            color: '#7a7a78',
-            marginBottom: 4,
-            marginRight: 2,
-          }}
-        >
-          RM
-        </span>
-        <span
-          style={{
-            fontFamily: '"Geist", -apple-system, sans-serif',
-            fontWeight: 700,
-            fontSize: 28,
-            color: '#f5f5f4',
-            letterSpacing: '-0.03em',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          {intPart}
-        </span>
-        <span
-          style={{
-            fontFamily: '"Geist", -apple-system, sans-serif',
-            fontWeight: 500,
-            fontSize: 16,
-            color: '#5b5b59',
-            marginBottom: 2,
-          }}
-        >
-          {decPart}
-        </span>
+        {hidden ? (
+          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 22, color: '#5b5b59', letterSpacing: '0.1em' }}>
+            ••••••
+          </span>
+        ) : (
+          <>
+            <span style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: '#7a7a78', marginBottom: 4, marginRight: 2 }}>
+              RM
+            </span>
+            <span style={{ fontFamily: '"Geist", -apple-system, sans-serif', fontWeight: 700, fontSize: 28, color: '#f5f5f4', letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>
+              {intPart}
+            </span>
+            <span style={{ fontFamily: '"Geist", -apple-system, sans-serif', fontWeight: 500, fontSize: 16, color: '#5b5b59', marginBottom: 2 }}>
+              {decPart}
+            </span>
+          </>
+        )}
       </div>
 
       <span
@@ -121,8 +105,8 @@ function StatCard({ eyebrow, amount, caption, delta }: StatCardProps) {
 }
 
 export default function StatsColumn({ income, spent, saved, dayOfMonth, daysIn }: StatsColumnProps) {
+  const [hidden] = usePrivacyMode()
   const projected = dayOfMonth > 0 ? Math.round((spent / dayOfMonth) * daysIn) : 0
-  const free = Math.max(0, income - spent - saved)
   const projectedDelta = projected - income
 
   return (
@@ -131,13 +115,15 @@ export default function StatsColumn({ income, spent, saved, dayOfMonth, daysIn }
         eyebrow="RECEIVED"
         amount={income}
         caption="income this month"
+        hidden={hidden}
       />
       <StatCard
         eyebrow="SPENT"
         amount={spent}
         caption="expenses this month"
+        hidden={hidden}
         delta={
-          dayOfMonth > 0 && income > 0
+          !hidden && dayOfMonth > 0 && income > 0
             ? { label: projectedDelta > 0 ? `proj. RM ${formatRM(projectedDelta, 0)} short` : `on track`, tone: projectedDelta > 0 ? 'danger' : 'lime' }
             : undefined
         }
@@ -146,7 +132,8 @@ export default function StatsColumn({ income, spent, saved, dayOfMonth, daysIn }
         eyebrow="SAVED"
         amount={saved}
         caption="set aside this month"
-        delta={saved > 0 && income > 0 ? { label: `${Math.round((saved / income) * 100)}% of income`, tone: 'lime' } : undefined}
+        hidden={hidden}
+        delta={!hidden && saved > 0 && income > 0 ? { label: `${Math.round((saved / income) * 100)}% of income`, tone: 'lime' } : undefined}
       />
     </div>
   )
