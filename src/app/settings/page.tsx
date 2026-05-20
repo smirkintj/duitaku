@@ -15,26 +15,49 @@ export default function SettingsPage() {
   const [defaults, setDefaults] = useState<SalaryFormDefaults | undefined>()
   const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
+  const [payDay, setPayDay] = useState<number>(1)
+  const [payDayInput, setPayDayInput] = useState('1')
+  const [payDaySaved, setPayDaySaved] = useState(false)
 
   useEffect(() => {
-    fetch('/api/salary').then(r => r.json()).then(data => {
-      if (data) {
-        setCurrent({ amount: data.amount, grossAmount: data.grossAmount })
+    Promise.all([
+      fetch('/api/salary').then(r => r.json()),
+      fetch('/api/settings').then(r => r.json()),
+    ]).then(([salaryData, settingsData]) => {
+      if (salaryData) {
+        setCurrent({ amount: salaryData.amount, grossAmount: salaryData.grossAmount })
         const today = new Date()
         const firstOfMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
         setDefaults({
-          grossAmount: data.grossAmount ?? undefined,
-          epfEmployee: data.epfEmployee ?? undefined,
-          socso: data.socso ?? undefined,
-          eis: data.eis ?? undefined,
-          pcb: data.pcb ?? undefined,
-          otherDeductions: data.otherDeductions ?? undefined,
+          grossAmount: salaryData.grossAmount ?? undefined,
+          epfEmployee: salaryData.epfEmployee ?? undefined,
+          socso: salaryData.socso ?? undefined,
+          eis: salaryData.eis ?? undefined,
+          pcb: salaryData.pcb ?? undefined,
+          otherDeductions: salaryData.otherDeductions ?? undefined,
           effectiveFrom: firstOfMonth,
         })
+      }
+      if (settingsData?.payDay) {
+        setPayDay(settingsData.payDay)
+        setPayDayInput(String(settingsData.payDay))
       }
       setLoading(false)
     })
   }, [])
+
+  async function handlePayDaySave() {
+    const day = Math.min(31, Math.max(1, parseInt(payDayInput, 10) || 1))
+    await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payDay: day }),
+    })
+    setPayDay(day)
+    setPayDayInput(String(day))
+    setPayDaySaved(true)
+    setTimeout(() => setPayDaySaved(false), 2500)
+  }
 
   async function handleSave(values: SalaryFormValues) {
     await fetch('/api/salary', {
@@ -105,6 +128,65 @@ export default function SettingsPage() {
             <p style={{ fontSize: 12, color: '#5b5b59', ...S.sans, margin: 0, lineHeight: 1.6 }}>
               Salary history is preserved — each update adds a new entry. The most recent entry on or before the current month is used for budget calculations.
             </p>
+          </div>
+
+          {/* Pay cycle section */}
+          <div style={{ marginTop: 28, background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '24px 28px' }}>
+            <div style={{ ...S.label, marginBottom: 6 }}>PAY CYCLE</div>
+            <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: '0 0 20px', lineHeight: 1.6 }}>
+              Set the day your salary arrives. Budget cycles will run from this day each month — e.g. day 28 means 28 Nov → 27 Dec.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ ...S.label }}>SALARY ARRIVES ON DAY</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={payDayInput}
+                  onChange={e => setPayDayInput(e.target.value)}
+                  style={{
+                    width: 80,
+                    background: '#0d0d0d',
+                    border: '1px solid #2a2a2a',
+                    borderRadius: 8,
+                    color: '#f5f5f4',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    padding: '8px 12px',
+                    fontFamily: '"JetBrains Mono", monospace',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+              <button
+                onClick={handlePayDaySave}
+                style={{
+                  marginTop: 22,
+                  background: '#a3e635',
+                  color: '#0d0d0d',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '9px 18px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  ...S.sans,
+                }}
+              >
+                Save
+              </button>
+              {payDaySaved && (
+                <span style={{ marginTop: 22, fontSize: 13, color: '#a3e635', ...S.sans }}>Saved!</span>
+              )}
+            </div>
+            {payDay > 1 && (
+              <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(163,230,53,0.05)', border: '1px solid rgba(163,230,53,0.12)', borderRadius: 8 }}>
+                <span style={{ fontSize: 12, color: '#7a7a78', ...S.sans }}>
+                  Current cycle: <span style={{ color: '#a3e635', fontWeight: 600 }}>day {payDay} of each month</span>. Dashboard navigates by pay cycle instead of calendar month.
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

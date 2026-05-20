@@ -11,6 +11,7 @@ interface TopHeaderProps {
   remaining: number
   salary: number
   month: string
+  cycleLabel?: string
   onAdd?: () => void
   onPayday?: () => void
   hasPaidThisMonth?: boolean
@@ -63,9 +64,9 @@ function EyeOffIcon() {
   )
 }
 
-export default function TopHeader({ remaining, month, onAdd, onPayday, hasPaidThisMonth }: TopHeaderProps) {
+export default function TopHeader({ remaining, month, cycleLabel, onAdd, onPayday, hasPaidThisMonth }: TopHeaderProps) {
   const router = useRouter()
-  const monthLabel = formatMonthLabel(month)
+  const monthLabel = cycleLabel ?? formatMonthLabel(month)
   const [hidden, togglePrivacy] = usePrivacyMode()
 
   const goToPrev = () => router.push(`/?m=${prevMonth(month)}`)
@@ -97,7 +98,7 @@ export default function TopHeader({ remaining, month, onAdd, onPayday, hasPaidTh
             letterSpacing: '0.08em',
           }}
         >
-          DASHBOARD / {monthLabel}
+          CYCLE / {monthLabel}
         </span>
         <span
           style={{
@@ -146,9 +147,11 @@ export default function TopHeader({ remaining, month, onAdd, onPayday, hasPaidTh
               color: '#d0d0cf',
               letterSpacing: '0.06em',
               padding: '0 4px',
+              maxWidth: cycleLabel ? 180 : undefined,
+              textAlign: 'center',
             }}
           >
-            {monthLabel}
+            {cycleLabel ?? monthLabel}
           </span>
           <button
             onClick={goToNext}

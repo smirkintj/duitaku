@@ -72,6 +72,7 @@ export const userSettings = pgTable('user_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
   celestial: boolean('celestial').notNull().default(true),
   sidebarExpanded: boolean('sidebar_expanded').notNull().default(true),
+  payDay: integer('pay_day').default(1),  // day of month salary arrives (1-31)
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 

@@ -9,11 +9,12 @@ interface DashboardClientProps {
   remaining: number
   salary: number
   month: string
+  cycleLabel?: string
   hasPaidThisMonth: boolean
   salaryDefault: number
 }
 
-export default function DashboardClient({ remaining, salary, month, hasPaidThisMonth, salaryDefault }: DashboardClientProps) {
+export default function DashboardClient({ remaining, salary, month, cycleLabel, hasPaidThisMonth, salaryDefault }: DashboardClientProps) {
   const [showPayday, setShowPayday] = useState(false)
   const router = useRouter()
 
@@ -25,6 +26,7 @@ export default function DashboardClient({ remaining, salary, month, hasPaidThisM
         remaining={remaining}
         salary={salary}
         month={month}
+        cycleLabel={cycleLabel}
         onAdd={() => window.dispatchEvent(new CustomEvent('open-add-modal'))}
         onPayday={() => setShowPayday(true)}
         hasPaidThisMonth={hasPaidThisMonth}

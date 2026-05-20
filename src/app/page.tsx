@@ -1,6 +1,6 @@
 import React from 'react'
 import { db } from '@/db'
-import { financeTransactions, financeCategories, financeSalary, financeBills, financeBnpl, financeBillPayments } from '@/db/schema'
+import { financeTransactions, financeCategories, financeSalary, financeBills, financeBnpl, financeBillPayments, userSettings } from '@/db/schema'
 import { and, gte, lte, desc, eq } from 'drizzle-orm'
 import SidebarClient from '@/components/finance/SidebarClient'
 import HeroRemaining from '@/components/finance/HeroRemaining'
@@ -13,14 +13,7 @@ import DashboardClient from '@/components/finance/DashboardClient'
 import SalarySetupCard from '@/components/finance/SalarySetupCard'
 import NetWorthWidget from '@/components/finance/NetWorthWidget'
 import { computeRedFlags } from '@/lib/red-flags'
-
-function getDaysInMonth(year: number, month: number) {
-  return new Date(year, month, 0).getDate()
-}
-
-function padMonth(n: number) {
-  return String(n).padStart(2, '0')
-}
+import { getPayCycle, getCurrentBaseMonth, getDayInCycle, prevCycleMonth } from '@/lib/pay-cycle'
 
 interface PageProps {
   searchParams: Promise<{ m?: string }>
@@ -47,23 +40,25 @@ export default async function HomePage({ searchParams }: PageProps) {
   const mParam = sp.m
 
   const now = new Date()
-  let year = now.getFullYear()
-  let month = now.getMonth() + 1
 
-  if (mParam && /^\d{4}-\d{2}$/.test(mParam)) {
-    const [y, m] = mParam.split('-').map(Number)
-    year = y
-    month = m
-  }
+  // Load pay day setting (default 1 = calendar month)
+  const settingsRows = await db.select({ payDay: userSettings.payDay }).from(userSettings).limit(1)
+  const payDay = settingsRows[0]?.payDay ?? 1
 
-  const monthStr = `${year}-${padMonth(month)}`
-  const startDate = `${year}-${padMonth(month)}-01`
-  const endDate = `${year}-${padMonth(month)}-31`
-  const daysIn = getDaysInMonth(year, month)
+  // Determine which cycle (base month) to view
+  const baseMonth = (mParam && /^\d{4}-\d{2}$/.test(mParam))
+    ? mParam
+    : getCurrentBaseMonth(now, payDay)
 
-  // Today's day of month (if current month, else last day)
-  const isCurrentMonth = now.getFullYear() === year && now.getMonth() + 1 === month
-  const dayOfMonth = isCurrentMonth ? now.getDate() : daysIn
+  const cycle = getPayCycle(baseMonth, payDay)
+  const { startDate, endDate, daysIn, label: cycleLabel } = cycle
+  const monthStr = baseMonth
+
+  const [cycleYear, cycleMonth] = baseMonth.split('-').map(Number)
+
+  // Day of cycle (1-based, capped at daysIn for past cycles)
+  const isCurrentCycle = baseMonth === getCurrentBaseMonth(now, payDay)
+  const dayOfMonth = isCurrentCycle ? getDayInCycle(now, startDate, daysIn) : daysIn
 
   // Fetch in parallel
   const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth] = await Promise.all([
@@ -89,7 +84,7 @@ export default async function HomePage({ searchParams }: PageProps) {
     db.select().from(financeCategories),
     db.select().from(financeBills).where(eq(financeBills.isActive, true)),
     db.select().from(financeBnpl).where(eq(financeBnpl.isActive, true)),
-    db.select().from(financeBillPayments).where(eq(financeBillPayments.month, monthStr)),
+    db.select().from(financeBillPayments).where(eq(financeBillPayments.month, baseMonth)),
   ])
 
   const salaryDefault = salaryRows[0]?.amount ?? 0
@@ -126,7 +121,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const billsPaidCount = cashBills.filter(b => paidBillIds.has(b.id)).length
   const billsCashCount = cashBills.length
 
-  const nowIdx = year * 12 + month
+  const nowIdx = cycleYear * 12 + cycleMonth
   const activeBnplThisMonth = activeBnpl.filter(p => {
     const [sy, sm] = p.startMonth.split('-').map(Number)
     const si = sy * 12 + sm
@@ -143,26 +138,24 @@ export default async function HomePage({ searchParams }: PageProps) {
   // Buffer = what's free after all commitments + variable spending
   const remaining = Math.max(0, income - committedTotal - variableSpent - saved)
 
-  // Daily spend array
+  // Daily spend array (indexed by position in cycle, not calendar day)
   const dailySpend: number[] = Array(daysIn).fill(0)
   for (const tx of expenseTxs) {
-    const day = parseInt(tx.date.split('-')[2], 10)
-    if (day >= 1 && day <= daysIn) {
-      dailySpend[day - 1] += tx.amount
+    const idx = Math.floor(
+      (new Date(tx.date + 'T12:00:00').getTime() - new Date(startDate + 'T12:00:00').getTime()) / 86400000
+    )
+    if (idx >= 0 && idx < daysIn) {
+      dailySpend[idx] += tx.amount
     }
   }
 
-  // Per-category stats — fetch prior 3 months
-  const prior3Ranges = Array.from({ length: 3 }, (_, i) => {
-    let m = month - (i + 1)
-    let y = year
-    while (m < 1) { m += 12; y-- }
-    return {
-      start: `${y}-${padMonth(m)}-01`,
-      end: `${y}-${padMonth(m)}-31`,
-    }
+  // Per-category stats — fetch prior 3 cycles
+  let bm = baseMonth
+  const prior3Cycles = Array.from({ length: 3 }, () => {
+    bm = prevCycleMonth(bm)
+    return getPayCycle(bm, payDay)
   })
-
+  const prior3Ranges = prior3Cycles.map(c => ({ start: c.startDate, end: c.endDate }))
   const prevMonthRange = prior3Ranges[0]
 
   const [prior3Txs, prevMonthTxs] = await Promise.all([
@@ -202,13 +195,13 @@ export default async function HomePage({ searchParams }: PageProps) {
       const catExpenses = expenseTxs.filter((t) => t.categoryId === cat.id)
       const catSpent = catExpenses.reduce((a, t) => a + t.amount, 0)
 
-      // Spark: daily array
+      // Spark: daily array indexed by cycle position
       const spark: number[] = Array(daysIn).fill(0)
       for (const tx of catExpenses) {
-        const day = parseInt(tx.date.split('-')[2], 10)
-        if (day >= 1 && day <= daysIn) {
-          spark[day - 1] += tx.amount
-        }
+        const idx = Math.floor(
+          (new Date(tx.date + 'T12:00:00').getTime() - new Date(startDate + 'T12:00:00').getTime()) / 86400000
+        )
+        if (idx >= 0 && idx < daysIn) spark[idx] += tx.amount
       }
 
       // Prior 3mo average
@@ -285,6 +278,7 @@ export default async function HomePage({ searchParams }: PageProps) {
           remaining={remaining}
           salary={salary}
           month={monthStr}
+          cycleLabel={cycleLabel}
           hasPaidThisMonth={hasPaidThisMonth}
           salaryDefault={salaryDefault}
         />
