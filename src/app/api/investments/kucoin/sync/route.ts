@@ -40,22 +40,15 @@ export async function POST() {
       return Response.json({ error: 'KuCoin credentials not configured' }, { status: 400 })
     }
 
-    // Fetch main + trade accounts (bot accounts not accessible via standard API — needs Strategy permission)
-    const [mainData, tradeData] = await Promise.all([
-      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=main'),
-      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts?type=trade'),
+    // Fetch all account types in one call (main, trade, margin, trading_bot, etc.)
+    const [accountsData, botData] = await Promise.all([
+      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts'),
+      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v2/strategy/spot/bots?status=active&page=1&pageSize=50').catch(() => null),
     ])
 
-    // Also try bot endpoint — only works if API key has Strategy permission
-    const botData = await kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v2/strategy/spot/bots?status=active&page=1&pageSize=50')
-      .catch(() => null)
+    const allAccounts: { currency: string; balance: string }[] = accountsData?.data ?? []
 
-    const allAccounts: { currency: string; balance: string }[] = [
-      ...(mainData?.data ?? []),
-      ...(tradeData?.data ?? []),
-    ]
-
-    // If bot data is available, sum invested amounts per currency
+    // If bot data is available, add invested amounts per currency
     if (botData?.data?.items) {
       for (const bot of botData.data.items) {
         const currency = bot.investCurrency ?? 'USDT'
