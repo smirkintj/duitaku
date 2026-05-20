@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import SidebarClient from '@/components/finance/SidebarClient'
 import SalaryForm, { SalaryFormValues, SalaryFormDefaults } from '@/components/finance/SalaryForm'
 import { formatRM } from '@/lib/finance-utils'
@@ -10,14 +10,39 @@ const S = {
   sans: { fontFamily: '"Geist", -apple-system, sans-serif' } as React.CSSProperties,
 }
 
+function UploadIcon() {
+  return (
+    <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1={12} y1={3} x2={12} y2={15} />
+    </svg>
+  )
+}
+
+function SpinnerIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+        style={{ opacity: 0.3 }} />
+      <path d="M12 2v4" style={{ opacity: 1 }} />
+    </svg>
+  )
+}
+
 export default function SettingsPage() {
   const [current, setCurrent] = useState<{ amount: number; grossAmount?: number } | null>(null)
   const [defaults, setDefaults] = useState<SalaryFormDefaults | undefined>()
+  const [fillKey, setFillKey] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
   const [payDay, setPayDay] = useState<number>(1)
   const [payDayInput, setPayDayInput] = useState('1')
   const [payDaySaved, setPayDaySaved] = useState(false)
+  const [parsing, setParsing] = useState(false)
+  const [parseError, setParseError] = useState<string | null>(null)
+  const [parseSuccess, setParseSuccess] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     Promise.all([
@@ -45,6 +70,44 @@ export default function SettingsPage() {
       setLoading(false)
     })
   }, [])
+
+  async function handlePayslipUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
+    setParsing(true)
+    setParseError(null)
+    setParseSuccess(false)
+
+    const fd = new FormData()
+    fd.append('file', file)
+
+    try {
+      const res = await fetch('/api/salary/parse-payslip', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) {
+        setParseError(data.error ?? 'Failed to parse payslip')
+        return
+      }
+      setDefaults({
+        grossAmount: data.grossAmount || undefined,
+        epfEmployee: data.epfEmployee || undefined,
+        socso: data.socso || undefined,
+        eis: data.eis || undefined,
+        pcb: data.pcb || undefined,
+        otherDeductions: data.otherDeductions || undefined,
+        effectiveFrom: data.effectiveFrom || undefined,
+      })
+      setFillKey(k => k + 1)
+      setParseSuccess(true)
+      setTimeout(() => setParseSuccess(false), 4000)
+    } catch {
+      setParseError('Network error — please try again')
+    } finally {
+      setParsing(false)
+    }
+  }
 
   async function handlePayDaySave() {
     const day = Math.min(31, Math.max(1, parseInt(payDayInput, 10) || 1))
@@ -105,18 +168,60 @@ export default function SettingsPage() {
 
           {saved && (
             <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(163,230,53,0.08)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 10 }}>
-              <span style={{ fontSize: 13, color: '#a3e635', fontFamily: '"Geist", -apple-system, sans-serif', fontWeight: 500 }}>Salary updated successfully.</span>
+              <span style={{ fontSize: 13, color: '#a3e635', ...S.sans, fontWeight: 500 }}>Salary updated successfully.</span>
             </div>
           )}
 
           {/* Salary form */}
           <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '24px 28px' }}>
-            <div style={{ ...S.label, marginBottom: 16 }}>UPDATE PAYSLIP</div>
+            {/* Section header with upload button */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <span style={S.label}>UPDATE PAYSLIP</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {parseSuccess && (
+                  <span style={{ fontSize: 12, color: '#a3e635', ...S.sans }}>Payslip extracted — review and save</span>
+                )}
+                {parseError && (
+                  <span style={{ fontSize: 12, color: '#ef4444', ...S.sans }}>{parseError}</span>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  style={{ display: 'none' }}
+                  onChange={handlePayslipUpload}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={parsing || loading}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    background: parsing ? '#1a1a1a' : 'rgba(163,230,53,0.08)',
+                    color: parsing ? '#3a3a3a' : '#a3e635',
+                    border: `1px solid ${parsing ? '#222' : 'rgba(163,230,53,0.25)'}`,
+                    borderRadius: 8,
+                    padding: '7px 13px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: parsing ? 'not-allowed' : 'pointer',
+                    ...S.sans,
+                    transition: 'all 150ms',
+                  }}
+                >
+                  {parsing ? <SpinnerIcon /> : <UploadIcon />}
+                  {parsing ? 'Reading payslip…' : 'Upload payslip PDF'}
+                </button>
+              </div>
+            </div>
+
             {loading ? (
               <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans }}>Loading…</div>
             ) : (
               <SalaryForm
                 defaults={defaults}
+                fillKey={fillKey}
                 showEffectiveFrom
                 submitLabel={current ? 'Update Salary' : 'Set Salary'}
                 onSubmit={handleSave}
@@ -138,7 +243,7 @@ export default function SettingsPage() {
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ ...S.label }}>SALARY ARRIVES ON DAY</label>
+                <label style={S.label}>SALARY ARRIVES ON DAY</label>
                 <input
                   type="number"
                   min={1}

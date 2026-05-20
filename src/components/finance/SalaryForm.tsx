@@ -91,32 +91,56 @@ function DeductionInput({ label, value, onChange, placeholder, note }: {
 
 interface SalaryFormProps {
   defaults?: SalaryFormDefaults
+  fillKey?: number              // increment to re-initialize form from new defaults
   showEffectiveFrom?: boolean
   submitLabel?: string
   onSubmit: (values: SalaryFormValues) => Promise<void>
 }
 
-export default function SalaryForm({ defaults, showEffectiveFrom = false, submitLabel = 'Save', onSubmit }: SalaryFormProps) {
-  const initGross = defaults?.grossAmount ? String(defaults.grossAmount) : ''
-  const initEpfMode = detectEpfMode(defaults?.grossAmount ?? 0, defaults?.epfEmployee)
-  const initEpfCustom = initEpfMode === 'custom' && defaults?.epfEmployee ? String(defaults.epfEmployee) : ''
-
-  const [gross, setGross] = useState(initGross)
-  const [epfMode, setEpfMode] = useState<EpfMode>(initEpfMode)
-  const [epfCustom, setEpfCustom] = useState(initEpfCustom)
-  const [socsoOverride, setSocsoOverride] = useState(
-    defaults?.socso != null ? String(defaults.socso) : ''
-  )
-  const [eisOverride, setEisOverride] = useState(
-    defaults?.eis != null ? String(defaults.eis) : ''
-  )
-  const [pcb, setPcb] = useState(defaults?.pcb ? String(defaults.pcb) : '')
-  const [other, setOther] = useState(defaults?.otherDeductions ? String(defaults.otherDeductions) : '')
+export default function SalaryForm({ defaults, fillKey, showEffectiveFrom = false, submitLabel = 'Save', onSubmit }: SalaryFormProps) {
   const today = new Date()
   const firstOfMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  const [effectiveFrom, setEffectiveFrom] = useState(defaults?.effectiveFrom ?? firstOfMonth)
-  const [loading, setLoading] = useState(false)
 
+  function initFromDefaults(d?: SalaryFormDefaults) {
+    const gross = d?.grossAmount ? String(d.grossAmount) : ''
+    const mode = detectEpfMode(d?.grossAmount ?? 0, d?.epfEmployee)
+    return {
+      gross,
+      epfMode: mode as EpfMode,
+      epfCustom: mode === 'custom' && d?.epfEmployee ? String(d.epfEmployee) : '',
+      socsoOverride: d?.socso != null ? String(d.socso) : '',
+      eisOverride: d?.eis != null ? String(d.eis) : '',
+      pcb: d?.pcb ? String(d.pcb) : '',
+      other: d?.otherDeductions ? String(d.otherDeductions) : '',
+      effectiveFrom: d?.effectiveFrom ?? firstOfMonth,
+    }
+  }
+
+  const init = initFromDefaults(defaults)
+  const [gross, setGross] = useState(init.gross)
+  const [epfMode, setEpfMode] = useState<EpfMode>(init.epfMode)
+  const [epfCustom, setEpfCustom] = useState(init.epfCustom)
+  const [socsoOverride, setSocsoOverride] = useState(init.socsoOverride)
+  const [eisOverride, setEisOverride] = useState(init.eisOverride)
+  const [pcb, setPcb] = useState(init.pcb)
+  const [other, setOther] = useState(init.other)
+  const [effectiveFrom, setEffectiveFrom] = useState(init.effectiveFrom)
+
+  // Re-initialize when fillKey changes (payslip parsed)
+  const prevFillKey = React.useRef(fillKey)
+  if (fillKey !== prevFillKey.current) {
+    prevFillKey.current = fillKey
+    const next = initFromDefaults(defaults)
+    setGross(next.gross)
+    setEpfMode(next.epfMode)
+    setEpfCustom(next.epfCustom)
+    setSocsoOverride(next.socsoOverride)
+    setEisOverride(next.eisOverride)
+    setPcb(next.pcb)
+    setOther(next.other)
+    setEffectiveFrom(next.effectiveFrom)
+  }
+  const [loading, setLoading] = useState(false)
   const grossNum = parseFloat(gross) || 0
   const hasGross = grossNum > 0
 
