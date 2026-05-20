@@ -40,17 +40,20 @@ export async function POST() {
       return Response.json({ error: 'KuCoin credentials not configured' }, { status: 400 })
     }
 
-    // Fetch all account types + KuCoin Earn positions in parallel
-    const [accountsData, earnData, botData] = await Promise.all([
+    // Fetch accounts, earn, and all bot types in parallel
+    // Spot grid bots use /api/v2/grid/spot/bots (Spot Trading permission)
+    // Strategy/DCA bots use /api/v2/strategy/spot/bots (Strategy permission, often unavailable)
+    const [accountsData, earnData, gridBotData, strategyBotData] = await Promise.all([
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts'),
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v3/earn/saving/assets?status=ACTIVE&currentPage=1&pageSize=50').catch(() => null),
+      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v2/grid/spot/bots?status=active&currentPage=1&pageSize=50').catch(() => null),
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v2/strategy/spot/bots?status=active&page=1&pageSize=50').catch(() => null),
     ])
 
     const rawAccounts: { currency: string; balance: string; type?: string }[] = accountsData?.data ?? []
     const allAccounts: { currency: string; balance: string }[] = [...rawAccounts]
 
-    // KuCoin Earn (flexible savings) — balance lives outside regular accounts
+    // KuCoin Earn (flexible savings/staking)
     if (earnData?.data?.items) {
       for (const item of earnData.data.items) {
         const currency = item.currency ?? item.asset
@@ -61,16 +64,29 @@ export async function POST() {
       }
     }
 
-    // Trading bot positions (requires Strategy API permission)
-    if (botData?.data?.items) {
-      for (const bot of botData.data.items) {
-        const currency = bot.investCurrency ?? 'USDT'
-        const invested = parseFloat(bot.totalInvestment ?? bot.investedAmount ?? '0')
-        if (invested > 0) {
-          allAccounts.push({ currency, balance: String(invested) })
-        }
+    // Spot grid bots — each bot holds base + quote currency
+    // We add the quote (USDT) side and base currency side separately so price lookup handles them
+    if (gridBotData?.data?.items) {
+      for (const bot of gridBotData.data.items) {
+        // bot.symbol e.g. "BTC-USDT" → base=BTC, quote=USDT
+        const [baseCurrency, quoteCurrency] = (bot.symbol ?? '-').split('-')
+        const quoteAmt = parseFloat(bot.quoteSize ?? bot.quoteInvestment ?? bot.quoteFunds ?? '0')
+        const baseAmt = parseFloat(bot.baseSize ?? bot.baseInvestment ?? bot.baseFunds ?? '0')
+        if (quoteAmt > 0 && quoteCurrency) allAccounts.push({ currency: quoteCurrency, balance: String(quoteAmt) })
+        if (baseAmt > 0 && baseCurrency) allAccounts.push({ currency: baseCurrency, balance: String(baseAmt) })
       }
     }
+
+    // Strategy/DCA bots (requires extra permission, may be null)
+    if (strategyBotData?.data?.items) {
+      for (const bot of strategyBotData.data.items) {
+        const currency = bot.investCurrency ?? 'USDT'
+        const invested = parseFloat(bot.totalInvestment ?? bot.investedAmount ?? '0')
+        if (invested > 0) allAccounts.push({ currency, balance: String(invested) })
+      }
+    }
+
+    const botData = gridBotData ?? strategyBotData
 
     // Sum balances per currency
     const balanceMap: Record<string, number> = {}
@@ -127,14 +143,15 @@ export async function POST() {
     }
 
     const warnings: string[] = []
-    if (!botData) {
-      warnings.push('Trading bot (robotAsset) balances are not accessible — regenerate your KuCoin API key with the Strategy permission enabled to include bot holdings.')
+    if (!gridBotData && !strategyBotData) {
+      warnings.push('Trading bot balances could not be fetched. Your API key may need Spot Trading permission to access grid bot holdings.')
     }
 
     return Response.json({
       synced,
       holdings,
-      botApiAvailable: botData !== null,
+      gridBotAvailable: gridBotData !== null,
+      strategyBotAvailable: strategyBotData !== null,
       earnApiAvailable: earnData !== null,
       warnings,
     })
