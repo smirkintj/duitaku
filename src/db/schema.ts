@@ -55,7 +55,14 @@ export const financeTransactions = pgTable('finance_transactions', {
 
 export const financeSalary = pgTable('finance_salary', {
   id: uuid('id').defaultRandom().primaryKey(),
-  amount: real('amount').notNull(),
+  amount: real('amount').notNull(),        // net take-home (used everywhere as income base)
+  grossAmount: real('gross_amount'),       // gross salary before deductions
+  epfEmployee: real('epf_employee').default(0),
+  epfEmployer: real('epf_employer').default(0),
+  socso: real('socso').default(0),
+  eis: real('eis').default(0),
+  pcb: real('pcb').default(0),
+  otherDeductions: real('other_deductions').default(0),
   currency: text('currency').notNull().default('MYR'),
   effectiveFrom: text('effective_from').notNull(), // YYYY-MM-DD
   createdAt: timestamp('created_at').defaultNow().notNull(),
