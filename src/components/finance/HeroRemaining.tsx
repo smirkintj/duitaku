@@ -10,6 +10,8 @@ interface HeroRemainingProps {
   remaining: number
   salary: number
   spent: number
+  committedTotal: number
+  variableSpent: number
   daysIn: number
   dayOfMonth: number
   dailySpend: number[]
@@ -200,6 +202,8 @@ export default function HeroRemaining({
   remaining,
   salary,
   spent,
+  committedTotal,
+  variableSpent,
   daysIn,
   dayOfMonth,
   dailySpend,
@@ -212,7 +216,10 @@ export default function HeroRemaining({
   const intPart = dotIdx >= 0 ? rmStr.slice(0, dotIdx) : rmStr
   const decPart = dotIdx >= 0 ? rmStr.slice(dotIdx) : '.00'
 
-  const paceDelta = spent - (salary / daysIn) * dayOfMonth
+  // Pace only on variable spend — committed is fixed so pacing it is noise
+  const varBudget = Math.max(0, salary - committedTotal)
+  const varPace = (varBudget / daysIn) * dayOfMonth
+  const paceDelta = variableSpent - varPace
   const pacingAhead = paceDelta > 0
 
   const avgDaily = dailySpend.slice(0, dayOfMonth).reduce((a, b) => a + b, 0) / dayOfMonth
@@ -312,7 +319,7 @@ export default function HeroRemaining({
           {/* Subline */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
             <span style={{ fontSize: 13, color: '#a0a09e', fontFamily: '"Geist", -apple-system, sans-serif' }}>
-              {hidden ? 'of •••••• salary' : `of RM ${formatRM(salary)} salary`}
+              {hidden ? 'buffer after commitments' : `buffer · RM ${formatRM(salary)} salary`}
             </span>
             {!hidden && (
               <>
@@ -339,8 +346,40 @@ export default function HeroRemaining({
         <DayPacingDial dayOfMonth={dayOfMonth} daysIn={daysIn} spent={spent} salary={salary} />
       </div>
 
+      {/* Allocation bar */}
+      {!hidden && salary > 0 && (
+        <div style={{ marginTop: 22, position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
+            {[
+              { label: 'COMMITTED', amount: committedTotal, color: '#f97316' },
+              { label: 'VARIABLE',  amount: variableSpent,  color: '#60a5fa' },
+              { label: 'BUFFER',    amount: remaining,       color: '#a3e635' },
+            ].map(s => (
+              <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 6, height: 6, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.08em' }}>
+                  {s.label} <span style={{ color: '#7a7a78' }}>RM {formatRM(s.amount, 0)}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <div style={{ height: 5, background: '#1a1a1a', borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
+            {[
+              { amount: committedTotal, color: '#f97316' },
+              { amount: variableSpent,  color: '#60a5fa' },
+              { amount: remaining,      color: '#a3e635', opacity: 0.5 },
+            ].map((s, i) => {
+              const w = Math.max(0, (s.amount / salary) * 100)
+              return w > 0 ? (
+                <div key={i} style={{ width: `${w}%`, background: s.color, opacity: s.opacity ?? 1, transition: 'width 600ms ease' }} />
+              ) : null
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Spend curve section */}
-      <div style={{ marginTop: 28, position: 'relative', zIndex: 1 }}>
+      <div style={{ marginTop: 20, position: 'relative', zIndex: 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.08em' }}>
             DAILY SPEND · MTD

@@ -1,6 +1,6 @@
 import React from 'react'
 import { db } from '@/db'
-import { financeTransactions, financeCategories, financeSalary } from '@/db/schema'
+import { financeTransactions, financeCategories, financeSalary, financeBills, financeBnpl, financeBillPayments } from '@/db/schema'
 import { and, gte, lte, desc, eq } from 'drizzle-orm'
 import SidebarClient from '@/components/finance/SidebarClient'
 import HeroRemaining from '@/components/finance/HeroRemaining'
@@ -65,7 +65,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const dayOfMonth = isCurrentMonth ? now.getDate() : daysIn
 
   // Fetch in parallel
-  const [salaryRows, monthTxs, categories] = await Promise.all([
+  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth] = await Promise.all([
     db
       .select()
       .from(financeSalary)
@@ -84,13 +84,11 @@ export default async function HomePage({ searchParams }: PageProps) {
         isRecurring: financeTransactions.isRecurring,
       })
       .from(financeTransactions)
-      .where(
-        and(
-          gte(financeTransactions.date, startDate),
-          lte(financeTransactions.date, endDate),
-        ),
-      ),
+      .where(and(gte(financeTransactions.date, startDate), lte(financeTransactions.date, endDate))),
     db.select().from(financeCategories),
+    db.select().from(financeBills).where(eq(financeBills.isActive, true)),
+    db.select().from(financeBnpl).where(eq(financeBnpl.isActive, true)),
+    db.select().from(financeBillPayments).where(eq(financeBillPayments.month, monthStr)),
   ])
 
   const salaryDefault = salaryRows[0]?.amount ?? 0
@@ -112,18 +110,37 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   // Savings = expense txs in a "savings" category
   const savingsCatIds = new Set(
-    categories
-      .filter((c) => c.name.toLowerCase().includes('saving'))
-      .map((c) => c.id)
+    categories.filter((c) => c.name.toLowerCase().includes('saving')).map((c) => c.id)
   )
   const expenseTxs = monthTxs.filter((t) => t.type === 'expense')
   const savingsTxs = expenseTxs.filter((t) => t.categoryId && savingsCatIds.has(t.categoryId))
   const spendTxs = expenseTxs.filter((t) => !(t.categoryId && savingsCatIds.has(t.categoryId)))
-
   const saved = savingsTxs.reduce((a, t) => a + t.amount, 0)
-  const spent = spendTxs.reduce((a, t) => a + t.amount, 0)
-  const salary = income  // alias used downstream
-  const remaining = Math.max(0, income - spent - saved)
+  const salary = income
+
+  // Committed outflows: cash bills (non-CC) + active BNPL installments
+  const paidBillIds = new Set(billPaymentsThisMonth.map(p => p.billId))
+  const cashBills = activeBills.filter(b => b.paymentMethod !== 'credit_card')
+  const committedBills = cashBills.reduce((a, b) => a + b.amount, 0)
+  const billsPaidCount = cashBills.filter(b => paidBillIds.has(b.id)).length
+  const billsCashCount = cashBills.length
+
+  const nowIdx = year * 12 + month
+  const activeBnplThisMonth = activeBnpl.filter(p => {
+    const [sy, sm] = p.startMonth.split('-').map(Number)
+    const si = sy * 12 + sm
+    return nowIdx >= si && nowIdx <= si + p.totalInstallments - 1
+  })
+  const committedBnpl = activeBnplThisMonth.reduce((a, p) => a + p.installmentAmount, 0)
+  const committedTotal = committedBills + committedBnpl
+
+  // Variable spending = non-recurring expense transactions (what you chose to spend)
+  const variableTxs = spendTxs.filter(t => !t.isRecurring)
+  const variableSpent = variableTxs.reduce((a, t) => a + t.amount, 0)
+  const spent = spendTxs.reduce((a, t) => a + t.amount, 0) // kept for backwards compat (daily chart)
+
+  // Buffer = what's free after all commitments + variable spending
+  const remaining = Math.max(0, income - committedTotal - variableSpent - saved)
 
   // Daily spend array
   const dailySpend: number[] = Array(daysIn).fill(0)
@@ -292,6 +309,8 @@ export default async function HomePage({ searchParams }: PageProps) {
               remaining={remaining}
               salary={salary}
               spent={spent}
+              committedTotal={committedTotal}
+              variableSpent={variableSpent}
               daysIn={daysIn}
               dayOfMonth={dayOfMonth}
               dailySpend={dailySpend}
@@ -299,7 +318,13 @@ export default async function HomePage({ searchParams }: PageProps) {
             />
             <StatsColumn
               income={income}
-              spent={spent}
+              committedTotal={committedTotal}
+              committedBills={committedBills}
+              committedBnpl={committedBnpl}
+              billsPaidCount={billsPaidCount}
+              billsCashCount={billsCashCount}
+              variableSpent={variableSpent}
+              remaining={remaining}
               saved={saved}
               dayOfMonth={dayOfMonth}
               daysIn={daysIn}
