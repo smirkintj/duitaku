@@ -144,6 +144,23 @@ export const financeInvestments = pgTable('finance_investments', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
+export const financeLoans = pgTable('finance_loans', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  type: text('type').notNull().default('other'), // car | student | personal | mortgage | other
+  lender: text('lender'),
+  originalAmount: real('original_amount').notNull(),
+  outstandingBalance: real('outstanding_balance').notNull(),
+  interestRate: real('interest_rate'),   // annual flat rate %
+  monthlyInstallment: real('monthly_installment').notNull(),
+  startDate: text('start_date'),         // YYYY-MM-DD
+  tenureMonths: integer('tenure_months'),
+  billId: uuid('bill_id').references(() => financeBills.id, { onDelete: 'set null' }),
+  notes: text('notes'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
 export const financeApiKeys = pgTable('finance_api_keys', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
