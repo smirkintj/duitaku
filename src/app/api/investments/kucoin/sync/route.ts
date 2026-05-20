@@ -40,15 +40,28 @@ export async function POST() {
       return Response.json({ error: 'KuCoin credentials not configured' }, { status: 400 })
     }
 
-    // Fetch all account types in one call (main, trade, margin, trading_bot, etc.)
-    const [accountsData, botData] = await Promise.all([
+    // Fetch all account types + KuCoin Earn positions in parallel
+    const [accountsData, earnData, botData] = await Promise.all([
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v1/accounts'),
+      kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v3/earn/saving/assets?status=ACTIVE&currentPage=1&pageSize=50').catch(() => null),
       kucoinFetch(apiKey, apiSecret, apiPassphrase, '/api/v2/strategy/spot/bots?status=active&page=1&pageSize=50').catch(() => null),
     ])
 
-    const allAccounts: { currency: string; balance: string }[] = accountsData?.data ?? []
+    const rawAccounts: { currency: string; balance: string; type?: string }[] = accountsData?.data ?? []
+    const allAccounts: { currency: string; balance: string }[] = [...rawAccounts]
 
-    // If bot data is available, add invested amounts per currency
+    // KuCoin Earn (flexible savings) — balance lives outside regular accounts
+    if (earnData?.data?.items) {
+      for (const item of earnData.data.items) {
+        const currency = item.currency ?? item.asset
+        const balance = item.holdBalance ?? item.totalAmount ?? item.balance ?? '0'
+        if (currency && parseFloat(balance) > 0) {
+          allAccounts.push({ currency, balance: String(balance) })
+        }
+      }
+    }
+
+    // Trading bot positions (requires Strategy API permission)
     if (botData?.data?.items) {
       for (const bot of botData.data.items) {
         const currency = bot.investCurrency ?? 'USDT'
@@ -113,7 +126,18 @@ export async function POST() {
       synced++
     }
 
-    return Response.json({ synced, holdings, botApiAvailable: botData !== null })
+    return Response.json({
+      synced,
+      holdings,
+      botApiAvailable: botData !== null,
+      earnApiAvailable: earnData !== null,
+      debug: {
+        rawAccountCount: rawAccounts.length,
+        rawAccountTypes: [...new Set(rawAccounts.map((a: { type?: string }) => a.type).filter(Boolean))],
+        rawNonZero: rawAccounts.filter(a => parseFloat(a.balance) > 0.000001).map(a => ({ currency: a.currency, balance: a.balance, type: (a as { type?: string }).type })),
+        earnItems: earnData?.data?.items?.length ?? 0,
+      },
+    })
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })
   }
