@@ -12,9 +12,11 @@ export async function GET() {
 
   const salaryAmount = salary[0]?.amount ?? 0
 
-  const directDebitBills = bills.filter(b => b.paymentMethod !== 'credit_card')
+  // credit_card bills are already on the CC balance; everything else is a direct cash outflow
+  const cashBills = bills.filter(b => b.paymentMethod !== 'credit_card')
   const ccBills = bills.filter(b => b.paymentMethod === 'credit_card')
-  const directDebitTotal = directDebitBills.reduce((a, b) => a + b.amount, 0)
+  const directDebitBills = cashBills // alias used in response
+  const directDebitTotal = cashBills.reduce((a, b) => a + b.amount, 0)
   const ccBillsTotal = ccBills.reduce((a, b) => a + b.amount, 0)
 
   const bnplItems = bnplPlans.map(p => {

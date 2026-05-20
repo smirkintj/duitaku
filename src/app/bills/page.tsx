@@ -80,6 +80,19 @@ function ordinal(n: number) {
   return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
+const PAYMENT_METHODS = [
+  { v: 'direct_debit', label: 'Direct Debit',   badge: 'DD',     color: '#7a7a78' },
+  { v: 'credit_card',  label: 'Credit Card',     badge: 'CC',     color: '#60a5fa' },
+  { v: 'ewallet',      label: 'eWallet (TNG…)',  badge: 'TNG',    color: '#a78bfa' },
+  { v: 'telco',        label: 'Telco Billing',   badge: 'TELCO',  color: '#34d399' },
+] as const
+
+type PaymentMethod = typeof PAYMENT_METHODS[number]['v']
+
+function pmMeta(v: string) {
+  return PAYMENT_METHODS.find(m => m.v === v) ?? PAYMENT_METHODS[0]
+}
+
 function providerLabel(p: string) {
   if (p === 'shopee') return 'SHOPEE PAY LATER'
   if (p === 'tiktok') return 'TIKTOK PAY LATER'
@@ -550,17 +563,17 @@ export default function BillsPage() {
                 </div>
                 <div>
                   <label style={labelStyle}>PAYMENT METHOD</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {[{ v: 'direct_debit', label: 'Direct Debit' }, { v: 'credit_card', label: 'Credit Card' }].map(opt => (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {PAYMENT_METHODS.map(opt => (
                       <button
                         key={opt.v}
                         type="button"
-                        onClick={() => setEditingBill(b => b && ({ ...b, paymentMethod: opt.v, accountId: opt.v === 'direct_debit' ? null : b.accountId }))}
+                        onClick={() => setEditingBill(b => b && ({ ...b, paymentMethod: opt.v, accountId: opt.v !== 'credit_card' ? null : b.accountId }))}
                         style={{
-                          flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 500, ...S.sans,
-                          background: editingBill.paymentMethod === opt.v ? 'rgba(163,230,53,0.1)' : '#0d0d0d',
-                          border: editingBill.paymentMethod === opt.v ? '1px solid rgba(163,230,53,0.4)' : '1px solid #222',
-                          color: editingBill.paymentMethod === opt.v ? '#a3e635' : '#7a7a78',
+                          padding: '8px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 500, ...S.sans,
+                          background: editingBill.paymentMethod === opt.v ? `${opt.color}18` : '#0d0d0d',
+                          border: editingBill.paymentMethod === opt.v ? `1px solid ${opt.color}60` : '1px solid #222',
+                          color: editingBill.paymentMethod === opt.v ? opt.color : '#7a7a78',
                         }}
                       >{opt.label}</button>
                     ))}
@@ -638,17 +651,17 @@ export default function BillsPage() {
                 </div>
                 <div>
                   <label style={labelStyle}>PAYMENT METHOD</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {[{ v: 'direct_debit', label: 'Direct Debit' }, { v: 'credit_card', label: 'Credit Card' }].map(opt => (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {PAYMENT_METHODS.map(opt => (
                       <button
                         key={opt.v}
                         type="button"
-                        onClick={() => { setBillPaymentMethod(opt.v); if (opt.v === 'direct_debit') setBillAccountId('') }}
+                        onClick={() => { setBillPaymentMethod(opt.v); if (opt.v !== 'credit_card') setBillAccountId('') }}
                         style={{
-                          flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 500, ...S.sans,
-                          background: billPaymentMethod === opt.v ? 'rgba(163,230,53,0.1)' : '#0d0d0d',
-                          border: billPaymentMethod === opt.v ? '1px solid rgba(163,230,53,0.4)' : '1px solid #222',
-                          color: billPaymentMethod === opt.v ? '#a3e635' : '#7a7a78',
+                          padding: '8px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 500, ...S.sans,
+                          background: billPaymentMethod === opt.v ? `${opt.color}18` : '#0d0d0d',
+                          border: billPaymentMethod === opt.v ? `1px solid ${opt.color}60` : '1px solid #222',
+                          color: billPaymentMethod === opt.v ? opt.color : '#7a7a78',
                         }}
                       >{opt.label}</button>
                     ))}
@@ -1021,9 +1034,10 @@ function BillRow({ bill, onToggle, onEdit, onDelete, toggling, col, faded }: {
           <span style={{ fontSize: 13, fontWeight: 500, color: bill.paid ? '#5b5b59' : '#f5f5f4', ...S.sans, textDecoration: bill.paid ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {bill.name}
           </span>
-          {bill.paymentMethod === 'credit_card' && (
-            <span style={{ fontSize: 8, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', color: '#60a5fa', border: '1px solid #60a5fa30', borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>CC</span>
-          )}
+          {bill.paymentMethod !== 'direct_debit' && (() => {
+            const pm = pmMeta(bill.paymentMethod)
+            return <span style={{ fontSize: 8, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', color: pm.color, border: `1px solid ${pm.color}30`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>{pm.badge}</span>
+          })()}
         </div>
         <span style={{ ...S.label }}>{ordinal(bill.dueDay)}</span>
       </div>
