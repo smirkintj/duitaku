@@ -126,17 +126,17 @@ export async function POST() {
       synced++
     }
 
+    const warnings: string[] = []
+    if (!botData) {
+      warnings.push('Trading bot (robotAsset) balances are not accessible — regenerate your KuCoin API key with the Strategy permission enabled to include bot holdings.')
+    }
+
     return Response.json({
       synced,
       holdings,
       botApiAvailable: botData !== null,
       earnApiAvailable: earnData !== null,
-      debug: {
-        rawAccountCount: rawAccounts.length,
-        rawAccountTypes: [...new Set(rawAccounts.map((a: { type?: string }) => a.type).filter(Boolean))],
-        rawNonZero: rawAccounts.filter(a => parseFloat(a.balance) > 0.000001).map(a => ({ currency: a.currency, balance: a.balance, type: (a as { type?: string }).type })),
-        earnItems: earnData?.data?.items?.length ?? 0,
-      },
+      warnings,
     })
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })

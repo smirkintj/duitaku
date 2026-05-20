@@ -95,6 +95,7 @@ export default function InvestmentsPage() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
+  const [syncWarnings, setSyncWarnings] = useState<string[]>([])
 
   // Credential check
   const [kucoinConfigured, setKucoinConfigured] = useState(false)
@@ -188,12 +189,14 @@ export default function InvestmentsPage() {
   async function handleSync() {
     setSyncing(true)
     setSyncResult(null)
+    setSyncWarnings([])
     const res = await fetch('/api/investments/kucoin/sync', { method: 'POST' })
     const data = await res.json()
     if (data.error) {
       setSyncResult(`Error: ${data.error}`)
     } else {
       setSyncResult(`Synced ${data.synced} holding${data.synced !== 1 ? 's' : ''}`)
+      setSyncWarnings(data.warnings ?? [])
       await load()
     }
     setSyncing(false)
@@ -282,6 +285,11 @@ export default function InvestmentsPage() {
                     {syncResult.toUpperCase()}
                   </span>
                 )}
+                {syncWarnings.map((w, i) => (
+                  <div key={i} style={{ fontSize: 11, color: '#f97316', ...S.sans, background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)', borderRadius: 6, padding: '6px 10px', marginTop: 4 }}>
+                    ⚠ {w}
+                  </div>
+                ))}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
