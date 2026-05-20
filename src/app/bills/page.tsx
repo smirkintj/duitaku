@@ -17,6 +17,7 @@ interface Bill {
 
 interface BnplPlan {
   id: string
+  accountId: string | null
   merchant: string
   provider: string
   totalAmount: number
@@ -26,6 +27,12 @@ interface BnplPlan {
   startMonth: string
   notes: string | null
   isActive: boolean
+}
+
+interface CcAccount {
+  id: string
+  name: string
+  lastFour: string | null
 }
 
 const S = {
@@ -78,6 +85,7 @@ export default function BillsPage() {
 
   const [bills, setBills] = useState<Bill[]>([])
   const [bnpl, setBnpl] = useState<BnplPlan[]>([])
+  const [accounts, setAccounts] = useState<CcAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [bnplLoading, setBnplLoading] = useState(true)
   const [toggling, setToggling] = useState<string | null>(null)
@@ -103,6 +111,7 @@ export default function BillsPage() {
   const [bnplCount, setBnplCount] = useState('')
   const [bnplStart, setBnplStart] = useState(defaultMonth)
   const [bnplNotes, setBnplNotes] = useState('')
+  const [bnplAccountId, setBnplAccountId] = useState('')
   const [bnplSaving, setBnplSaving] = useState(false)
 
   const loadBills = useCallback(async () => {
@@ -119,8 +128,15 @@ export default function BillsPage() {
     setBnplLoading(false)
   }, [])
 
+  const loadAccounts = useCallback(async () => {
+    const res = await fetch('/api/accounts')
+    const data = await res.json()
+    setAccounts((data as { type: string; id: string; name: string; lastFour: string | null }[]).filter(a => a.type === 'credit'))
+  }, [])
+
   useEffect(() => { loadBills() }, [loadBills])
   useEffect(() => { loadBnpl() }, [loadBnpl])
+  useEffect(() => { loadAccounts() }, [loadAccounts])
 
   async function togglePaid(bill: Bill) {
     setToggling(bill.id)
@@ -206,10 +222,11 @@ export default function BillsPage() {
         totalInstallments: parseInt(bnplCount),
         startMonth: bnplStart,
         notes: bnplNotes.trim() || undefined,
+        accountId: bnplAccountId || undefined,
       }),
     })
     setBnplMerchant(''); setBnplProvider('shopee'); setBnplTotal(''); setBnplInstallment('')
-    setBnplCount(''); setBnplStart(defaultMonth); setBnplNotes('')
+    setBnplCount(''); setBnplStart(defaultMonth); setBnplNotes(''); setBnplAccountId('')
     setShowAddBnpl(false)
     setBnplSaving(false)
     await loadBnpl()
@@ -367,6 +384,7 @@ export default function BillsPage() {
                   const endIdx = startIdx + plan.totalInstallments - 1
                   const activeThisMonth = curIdx >= startIdx && curIdx <= endIdx
                   const notStartedYet = curIdx < startIdx
+                  const linkedAccount = plan.accountId ? accounts.find(a => a.id === plan.accountId) : null
                   return (
                     <div key={plan.id} style={{ background: '#111', border: `1px solid ${notStartedYet ? '#1f2a1a' : '#1a1a1a'}`, borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
@@ -383,6 +401,11 @@ export default function BillsPage() {
                             {!notStartedYet && (
                               <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.06em' }}>
                                 FROM {fmtMonth(plan.startMonth)}
+                              </span>
+                            )}
+                            {linkedAccount && (
+                              <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: '#94a3b8', border: '1px solid #94a3b840', borderRadius: 4, padding: '2px 6px' }}>
+                                {linkedAccount.name}{linkedAccount.lastFour ? ` ••${linkedAccount.lastFour}` : ''}
                               </span>
                             )}
                           </div>
@@ -589,6 +612,17 @@ export default function BillsPage() {
                     <option value="other">Other</option>
                   </select>
                 </div>
+                {accounts.length > 0 && (
+                  <div>
+                    <label style={labelStyle}>CHARGED TO CC (OPTIONAL)</label>
+                    <select value={bnplAccountId} onChange={e => setBnplAccountId(e.target.value)} style={{ ...inputStyle }}>
+                      <option value="">— No linked card —</option>
+                      {accounts.map(a => (
+                        <option key={a.id} value={a.id}>{a.name}{a.lastFour ? ` (••${a.lastFour})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
                     <label style={labelStyle}>TOTAL AMOUNT (RM)</label>

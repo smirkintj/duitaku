@@ -89,6 +89,7 @@ export const financeBillPayments = pgTable('finance_bill_payments', {
 
 export const financeBnpl = pgTable('finance_bnpl', {
   id: uuid('id').defaultRandom().primaryKey(),
+  accountId: uuid('account_id').references(() => financeAccounts.id, { onDelete: 'set null' }),
   merchant: text('merchant').notNull(),
   provider: text('provider').notNull().default('shopee'),
   totalAmount: real('total_amount').notNull(),

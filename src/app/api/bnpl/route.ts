@@ -8,8 +8,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json() as { merchant: string; provider?: string; totalAmount: number; installmentAmount: number; totalInstallments: number; startMonth: string; notes?: string }
+  const body = await request.json() as { merchant: string; provider?: string; totalAmount: number; installmentAmount: number; totalInstallments: number; startMonth: string; notes?: string; accountId?: string }
   const [created] = await db.insert(financeBnpl).values({
+    accountId: body.accountId ?? null,
     merchant: body.merchant,
     provider: body.provider ?? 'shopee',
     totalAmount: body.totalAmount,
