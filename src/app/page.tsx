@@ -11,6 +11,7 @@ import AICoachCard from '@/components/finance/AICoachCard'
 import RedFlagClient from '@/components/finance/RedFlagClient'
 import DashboardClient from '@/components/finance/DashboardClient'
 import SalarySetupCard from '@/components/finance/SalarySetupCard'
+import NetWorthWidget from '@/components/finance/NetWorthWidget'
 import { computeRedFlags } from '@/lib/red-flags'
 
 function getDaysInMonth(year: number, month: number) {
@@ -297,6 +298,8 @@ export default async function HomePage({ searchParams }: PageProps) {
           }}
         >
           {flags.length > 0 && <RedFlagClient flags={flags} />}
+
+          <NetWorthWidget month={monthStr} />
 
           <div
             style={{
