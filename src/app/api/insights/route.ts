@@ -201,7 +201,7 @@ ${savingsSummary.length > 0 ? savingsSummary.map((g) => `- ${g.name}: RM ${g.cur
 
 TOTAL FIXED MONTHLY OUTFLOWS: RM ${(totalBillsCommitment + totalMonthlyBnpl).toFixed(2)} (bills + BNPL installments)
 
-Return ONLY a JSON object with this structure, no other text:
+Return ONLY a JSON object with this structure, no other text. Do not use any emojis anywhere in the response:
 {
   "summary": "2-3 sentence overview of the month",
   "bullets": [
@@ -212,7 +212,7 @@ Return ONLY a JSON object with this structure, no other text:
   ]
 }
 
-Provide 3-4 bullets and 3-4 plan steps. Be specific with amounts and percentages.`
+Provide 3-4 bullets and 3-4 plan steps. Be specific with amounts and percentages. No emojis.`
 
   let message
   try {
@@ -226,7 +226,9 @@ Provide 3-4 bullets and 3-4 plan steps. Be specific with amounts and percentages
     return Response.json({ error: msg }, { status: 502 })
   }
 
-  const responseText = message.content[0].type === 'text' ? message.content[0].text : '{}'
+  const rawText = message.content[0].type === 'text' ? message.content[0].text : '{}'
+  // Strip any emoji characters the model might still include
+  const responseText = rawText.replace(/[\u{1F300}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim()
 
   let data: CoachData
   try {

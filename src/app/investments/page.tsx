@@ -287,7 +287,7 @@ export default function InvestmentsPage() {
                 )}
                 {syncWarnings.map((w, i) => (
                   <div key={i} style={{ fontSize: 11, color: '#f97316', ...S.sans, background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)', borderRadius: 6, padding: '6px 10px', marginTop: 4 }}>
-                    ⚠ {w}
+                    {w}
                   </div>
                 ))}
               </div>

@@ -111,6 +111,7 @@ export default function BillsPage() {
   const [showAddBill, setShowAddBill] = useState(false)
   const [showAddBnpl, setShowAddBnpl] = useState(false)
   const [editingBnpl, setEditingBnpl] = useState<BnplPlan | null>(null)
+  const [editingBill, setEditingBill] = useState<Bill | null>(null)
 
   // Add bill form
   const [billName, setBillName] = useState('')
@@ -191,6 +192,25 @@ export default function BillsPage() {
     setBillName(''); setBillAmount(''); setBillDueDay('1'); setBillIcon('bolt'); setBillPaymentMethod('direct_debit'); setBillAccountId('')
     setShowAddBill(false)
     setBillSaving(false)
+    await Promise.all([loadBills(), loadSnapshot()])
+  }
+
+  async function saveBillEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingBill) return
+    await fetch(`/api/bills/${editingBill.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: editingBill.name,
+        amount: editingBill.amount,
+        dueDay: editingBill.dueDay,
+        icon: editingBill.icon,
+        paymentMethod: editingBill.paymentMethod,
+        accountId: editingBill.accountId,
+      }),
+    })
+    setEditingBill(null)
     await Promise.all([loadBills(), loadSnapshot()])
   }
 
@@ -348,6 +368,7 @@ export default function BillsPage() {
                       key={bill.id}
                       bill={bill}
                       onToggle={() => togglePaid(bill)}
+                      onEdit={() => setEditingBill({ ...bill })}
                       onDelete={() => deleteBill(bill.id)}
                       toggling={toggling === bill.id}
                       col={i % 2 === 0 ? 'left' : 'right'}
@@ -365,6 +386,7 @@ export default function BillsPage() {
                           key={bill.id}
                           bill={bill}
                           onToggle={() => togglePaid(bill)}
+                          onEdit={() => setEditingBill({ ...bill })}
                           onDelete={() => deleteBill(bill.id)}
                           toggling={toggling === bill.id}
                           col={i % 2 === 0 ? 'left' : 'right'}
@@ -500,6 +522,94 @@ export default function BillsPage() {
             )}
           </div>
         </div>
+
+        {/* Edit Bill Modal */}
+        {editingBill && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+            <div style={{ background: '#111', border: '1px solid #222', borderRadius: 16, padding: 28, width: 440, maxWidth: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.6)', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+                <span style={{ fontSize: 16, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>Edit Bill</span>
+                <button onClick={() => setEditingBill(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#5b5b59', padding: 4 }}>
+                  <Icon name="close" width={18} height={18} />
+                </button>
+              </div>
+              <form onSubmit={saveBillEdit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>BILL NAME</label>
+                  <input value={editingBill.name} onChange={e => setEditingBill(b => b && ({ ...b, name: e.target.value }))} style={inputStyle} required />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>AMOUNT (RM)</label>
+                    <input type="number" value={editingBill.amount} onChange={e => setEditingBill(b => b && ({ ...b, amount: parseFloat(e.target.value) }))} min="0" step="0.01" style={inputStyle} required />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>DUE DAY</label>
+                    <input type="number" value={editingBill.dueDay} onChange={e => setEditingBill(b => b && ({ ...b, dueDay: parseInt(e.target.value) }))} min="1" max="31" style={inputStyle} required />
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>PAYMENT METHOD</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {[{ v: 'direct_debit', label: 'Direct Debit' }, { v: 'credit_card', label: 'Credit Card' }].map(opt => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => setEditingBill(b => b && ({ ...b, paymentMethod: opt.v, accountId: opt.v === 'direct_debit' ? null : b.accountId }))}
+                        style={{
+                          flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 500, ...S.sans,
+                          background: editingBill.paymentMethod === opt.v ? 'rgba(163,230,53,0.1)' : '#0d0d0d',
+                          border: editingBill.paymentMethod === opt.v ? '1px solid rgba(163,230,53,0.4)' : '1px solid #222',
+                          color: editingBill.paymentMethod === opt.v ? '#a3e635' : '#7a7a78',
+                        }}
+                      >{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+                {editingBill.paymentMethod === 'credit_card' && accounts.length > 0 && (
+                  <div>
+                    <label style={labelStyle}>CHARGED TO</label>
+                    <select
+                      value={editingBill.accountId ?? ''}
+                      onChange={e => setEditingBill(b => b && ({ ...b, accountId: e.target.value || null }))}
+                      style={inputStyle}
+                    >
+                      <option value="">— Select card —</option>
+                      {accounts.map(a => (
+                        <option key={a.id} value={a.id}>{a.name}{a.lastFour ? ` (••${a.lastFour})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label style={labelStyle}>ICON</label>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {CATEGORY_ICONS.map(icon => (
+                      <button
+                        key={icon}
+                        type="button"
+                        onClick={() => setEditingBill(b => b && ({ ...b, icon }))}
+                        style={{
+                          width: 36, height: 36,
+                          background: editingBill.icon === icon ? 'rgba(163,230,53,0.12)' : '#0d0d0d',
+                          border: editingBill.icon === icon ? '1px solid rgba(163,230,53,0.4)' : '1px solid #222',
+                          borderRadius: 8, cursor: 'pointer',
+                          color: editingBill.icon === icon ? '#a3e635' : '#5b5b59',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        <CategoryIcon name={icon as Parameters<typeof CategoryIcon>[0]['name']} width={16} height={16} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button type="submit" style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '11px 0', cursor: 'pointer', fontSize: 14, fontWeight: 600, ...S.sans, marginTop: 4 }}>
+                  Save Changes
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Add Bill Modal */}
         {showAddBill && (
@@ -864,9 +974,10 @@ function DebtSnapshot({ snapshot, targetCcPayment, setTargetCcPayment }: {
   )
 }
 
-function BillRow({ bill, onToggle, onDelete, toggling, col, faded }: {
+function BillRow({ bill, onToggle, onEdit, onDelete, toggling, col, faded }: {
   bill: Bill
   onToggle: () => void
+  onEdit: () => void
   onDelete: () => void
   toggling: boolean
   col: 'left' | 'right'
@@ -922,6 +1033,18 @@ function BillRow({ bill, onToggle, onDelete, toggling, col, faded }: {
         RM {bill.amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </span>
 
+      {/* Edit */}
+      <button
+        onClick={onEdit}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#333', display: 'flex', alignItems: 'center', padding: 2, borderRadius: 4, flexShrink: 0 }}
+        onMouseEnter={e => { e.currentTarget.style.color = '#a3e635' }}
+        onMouseLeave={e => { e.currentTarget.style.color = '#333' }}
+      >
+        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+      </button>
       {/* Delete */}
       <button
         onClick={onDelete}
