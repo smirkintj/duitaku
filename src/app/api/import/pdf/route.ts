@@ -2,14 +2,23 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
 
 async function extractPdfText(buffer: Buffer, password?: string): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getDocument, GlobalWorkerOptions } = require('pdfjs-dist/legacy/build/pdf.mjs')
-  GlobalWorkerOptions.workerSrc = ''
+  // pdfjs-dist is in serverExternalPackages so it runs as a real Node module, not bundled.
+  // Using dynamic import (ESM) to get the actual module exports.
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
 
-  const loadingTask = getDocument({
+  // Point workerSrc to the worker file so pdfjs can use a worker_thread in Node.
+  // Using a file:// URL ensures Node resolves it correctly outside of webpack bundling.
+  const { createRequire } = await import('module')
+  const require = createRequire(import.meta.url)
+  const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
+  pdfjs.GlobalWorkerOptions.workerSrc = `file://${workerPath}`
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const loadingTask = (pdfjs as any).getDocument({
     data: new Uint8Array(buffer),
     ...(password ? { password } : {}),
   })
+
   const pdf = await loadingTask.promise
 
   let text = ''
@@ -70,16 +79,23 @@ export async function POST(request: Request) {
       return Response.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    const password = (formData.get('password') as string | null) ?? undefined
+    const password = (formData.get('password') as string) || undefined
 
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
     let fullText: string
     try {
-      fullText = await extractPdfText(buffer, password || undefined)
+      fullText = await extractPdfText(buffer, password)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error'
+      const msg = err instanceof Error ? err.message : String(err)
+      // Surface password errors clearly so the frontend can prompt the user
+      if (msg.includes('No password') || msg.includes('NEED_PASSWORD')) {
+        return Response.json({ error: 'This PDF is password-protected. Enter the password and try again.', needsPassword: true }, { status: 422 })
+      }
+      if (msg.includes('Incorrect password') || msg.includes('INCORRECT_PASSWORD')) {
+        return Response.json({ error: 'Incorrect PDF password.', needsPassword: true }, { status: 422 })
+      }
       return Response.json({ error: `Failed to read PDF: ${msg}` }, { status: 422 })
     }
 

@@ -25,6 +25,7 @@ export default function ImportPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [needsPassword, setNeedsPassword] = useState(false)
   const [transactions, setTransactions] = useState<ParsedTx[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [confirming, setConfirming] = useState(false)
@@ -41,13 +42,17 @@ export default function ImportPage() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('password', password)
+      if (password) formData.append('password', password)
 
       const res = await fetch('/api/import/pdf', { method: 'POST', body: formData })
-      const data = await res.json() as { transactions?: ParsedTx[]; error?: string }
+      const data = await res.json() as { transactions?: ParsedTx[]; error?: string; needsPassword?: boolean }
 
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Import failed')
+      if (!res.ok || data.error) {
+        if (data.needsPassword) setNeedsPassword(true)
+        throw new Error(data.error ?? 'Import failed')
+      }
 
+      setNeedsPassword(false)
       setTransactions(data.transactions ?? [])
 
       // Load categories for dropdowns
@@ -138,21 +143,29 @@ export default function ImportPage() {
                 )}
               </div>
 
-              {/* Password */}
-              <div>
-                <label style={labelStyle}>PDF Password (if protected)</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Leave empty if not password-protected"
-                  style={inputStyle}
-                />
-              </div>
+              {/* Password — shown always if user typed one, or after server says it's needed */}
+              {(needsPassword || password) && (
+                <div>
+                  <label style={labelStyle}>PDF Password</label>
+                  <input
+                    autoFocus
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter PDF password"
+                    style={{ ...inputStyle, borderColor: needsPassword && !password ? '#ef4444' : undefined }}
+                  />
+                </div>
+              )}
 
               {error && (
                 <div style={{ fontSize: 13, color: '#ef4444', fontFamily: '"Geist", -apple-system, sans-serif' }}>
                   {error}
+                  {needsPassword && !password && (
+                    <span style={{ display: 'block', marginTop: 4, fontSize: 12, color: '#7a7a78' }}>
+                      Enter the password above and try again.
+                    </span>
+                  )}
                 </div>
               )}
 
