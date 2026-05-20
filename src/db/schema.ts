@@ -76,6 +76,8 @@ export const financeBills = pgTable('finance_bills', {
   categoryId: uuid('category_id').references(() => financeCategories.id, { onDelete: 'set null' }),
   icon: text('icon').notNull().default('bolt'),
   isActive: boolean('is_active').notNull().default(true),
+  paymentMethod: text('payment_method').notNull().default('direct_debit'), // direct_debit | credit_card
+  accountId: uuid('account_id').references(() => financeAccounts.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 

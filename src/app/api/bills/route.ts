@@ -17,13 +17,15 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json() as { name: string; amount: number; dueDay?: number; categoryId?: string; icon?: string }
+  const body = await request.json() as { name: string; amount: number; dueDay?: number; categoryId?: string; icon?: string; paymentMethod?: string; accountId?: string }
   const [created] = await db.insert(financeBills).values({
     name: body.name,
     amount: body.amount,
     dueDay: body.dueDay ?? 1,
     categoryId: body.categoryId ?? null,
     icon: body.icon ?? 'bolt',
+    paymentMethod: body.paymentMethod ?? 'direct_debit',
+    accountId: body.accountId ?? null,
   }).returning()
   return Response.json(created, { status: 201 })
 }

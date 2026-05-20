@@ -12,7 +12,21 @@ interface Bill {
   categoryId: string | null
   icon: string
   isActive: boolean
+  paymentMethod: string
+  accountId: string | null
   paid?: boolean
+}
+
+interface SnapshotData {
+  salaryAmount: number
+  directDebitTotal: number
+  ccBillsTotal: number
+  activeBnplTotal: number
+  totalCcOutstanding: number
+  directDebitBills: { id: string; name: string; amount: number }[]
+  ccBills: { id: string; name: string; amount: number; accountId: string | null }[]
+  bnplItems: { id: string; merchant: string; provider: string; installmentAmount: number; remainingInstallments: number; remainingTotal: number; activeThisMonth: boolean; clearMonth: string }[]
+  ccAccounts: { id: string; name: string; lastFour: string | null; outstanding: number; creditLimit: number | null; utilisationPct: number | null }[]
 }
 
 interface BnplPlan {
@@ -86,6 +100,8 @@ export default function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([])
   const [bnpl, setBnpl] = useState<BnplPlan[]>([])
   const [accounts, setAccounts] = useState<CcAccount[]>([])
+  const [snapshot, setSnapshot] = useState<SnapshotData | null>(null)
+  const [targetCcPayment, setTargetCcPayment] = useState('')
   const [loading, setLoading] = useState(true)
   const [bnplLoading, setBnplLoading] = useState(true)
   const [toggling, setToggling] = useState<string | null>(null)
@@ -101,6 +117,8 @@ export default function BillsPage() {
   const [billAmount, setBillAmount] = useState('')
   const [billDueDay, setBillDueDay] = useState('1')
   const [billIcon, setBillIcon] = useState<string>('bolt')
+  const [billPaymentMethod, setBillPaymentMethod] = useState('direct_debit')
+  const [billAccountId, setBillAccountId] = useState('')
   const [billSaving, setBillSaving] = useState(false)
 
   // Add BNPL form
@@ -134,9 +152,15 @@ export default function BillsPage() {
     setAccounts((data as { type: string; id: string; name: string; lastFour: string | null }[]).filter(a => a.type === 'credit'))
   }, [])
 
+  const loadSnapshot = useCallback(async () => {
+    const res = await fetch('/api/debt-snapshot')
+    setSnapshot(await res.json())
+  }, [])
+
   useEffect(() => { loadBills() }, [loadBills])
   useEffect(() => { loadBnpl() }, [loadBnpl])
   useEffect(() => { loadAccounts() }, [loadAccounts])
+  useEffect(() => { loadSnapshot() }, [loadSnapshot])
 
   async function togglePaid(bill: Bill) {
     setToggling(bill.id)
@@ -162,12 +186,12 @@ export default function BillsPage() {
     await fetch('/api/bills', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: billName.trim(), amount: parseFloat(billAmount), dueDay: parseInt(billDueDay), icon: billIcon }),
+      body: JSON.stringify({ name: billName.trim(), amount: parseFloat(billAmount), dueDay: parseInt(billDueDay), icon: billIcon, paymentMethod: billPaymentMethod, accountId: billAccountId || undefined }),
     })
-    setBillName(''); setBillAmount(''); setBillDueDay('1'); setBillIcon('bolt')
+    setBillName(''); setBillAmount(''); setBillDueDay('1'); setBillIcon('bolt'); setBillPaymentMethod('direct_debit'); setBillAccountId('')
     setShowAddBill(false)
     setBillSaving(false)
-    await loadBills()
+    await Promise.all([loadBills(), loadSnapshot()])
   }
 
   async function saveBnplEdit(e: React.FormEvent) {
@@ -296,6 +320,9 @@ export default function BillsPage() {
               </div>
             ))}
           </div>
+
+          {/* Debt Snapshot */}
+          {snapshot && <DebtSnapshot snapshot={snapshot} targetCcPayment={targetCcPayment} setTargetCcPayment={setTargetCcPayment} />}
 
           {/* Bills list */}
           <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
@@ -500,6 +527,35 @@ export default function BillsPage() {
                   </div>
                 </div>
                 <div>
+                  <label style={labelStyle}>PAYMENT METHOD</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {[{ v: 'direct_debit', label: 'Direct Debit' }, { v: 'credit_card', label: 'Credit Card' }].map(opt => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => { setBillPaymentMethod(opt.v); if (opt.v === 'direct_debit') setBillAccountId('') }}
+                        style={{
+                          flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 500, ...S.sans,
+                          background: billPaymentMethod === opt.v ? 'rgba(163,230,53,0.1)' : '#0d0d0d',
+                          border: billPaymentMethod === opt.v ? '1px solid rgba(163,230,53,0.4)' : '1px solid #222',
+                          color: billPaymentMethod === opt.v ? '#a3e635' : '#7a7a78',
+                        }}
+                      >{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+                {billPaymentMethod === 'credit_card' && accounts.length > 0 && (
+                  <div>
+                    <label style={labelStyle}>CHARGED TO</label>
+                    <select value={billAccountId} onChange={e => setBillAccountId(e.target.value)} style={inputStyle}>
+                      <option value="">— Select card —</option>
+                      {accounts.map(a => (
+                        <option key={a.id} value={a.id}>{a.name}{a.lastFour ? ` (••${a.lastFour})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
                   <label style={labelStyle}>ICON</label>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {CATEGORY_ICONS.map(icon => (
@@ -663,6 +719,151 @@ export default function BillsPage() {
   )
 }
 
+function DebtSnapshot({ snapshot, targetCcPayment, setTargetCcPayment }: {
+  snapshot: SnapshotData
+  targetCcPayment: string
+  setTargetCcPayment: (v: string) => void
+}) {
+  const S = {
+    label: { fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.08em' } as React.CSSProperties,
+    mono: { fontFamily: '"JetBrains Mono", monospace' } as React.CSSProperties,
+    sans: { fontFamily: '"Geist", -apple-system, sans-serif' } as React.CSSProperties,
+  }
+
+  const ccPayment = parseFloat(targetCcPayment) || 0
+  const remaining = snapshot.salaryAmount - snapshot.directDebitTotal - snapshot.activeBnplTotal - ccPayment
+  const remainingColor = remaining < 0 ? '#ef4444' : remaining < snapshot.salaryAmount * 0.1 ? '#f97316' : '#a3e635'
+
+  const rm = (n: number) => `RM ${Math.abs(n).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  function fmtMonth(m: string) {
+    const [y, mo] = m.split('-').map(Number)
+    return new Date(y, mo - 1, 1).toLocaleString('en-MY', { month: 'short', year: 'numeric' })
+  }
+
+  const rows: { label: string; amount: number; sub?: string; color?: string; indent?: boolean }[] = [
+    { label: 'Monthly Salary', amount: snapshot.salaryAmount, color: '#a3e635' },
+    { label: 'Direct Debit Bills', amount: -snapshot.directDebitTotal, sub: `${snapshot.directDebitBills.length} bills`, indent: true },
+    { label: 'Active BNPL Installments', amount: -snapshot.activeBnplTotal, sub: `${snapshot.bnplItems.filter(p => p.activeThisMonth).length} plans`, indent: true },
+    { label: 'Target CC Payment', amount: -ccPayment, sub: 'you decide', indent: true },
+  ]
+
+  return (
+    <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
+      <div style={{ padding: '12px 18px', borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>Monthly Allocation</span>
+        <span style={{ ...S.label }}>DEBT SNAPSHOT</span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+        {/* Left: allocation breakdown */}
+        <div style={{ padding: '16px 18px', borderRight: '1px solid #141414', display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {rows.map((row, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: i < rows.length - 1 ? '1px solid #141414' : 'none' }}>
+              <span style={{ fontSize: 12, color: row.indent ? '#9a9a98' : '#f5f5f4', ...S.sans, paddingLeft: row.indent ? 10 : 0 }}>
+                {row.label}
+                {row.sub && <span style={{ ...S.label, marginLeft: 6 }}>{row.sub}</span>}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: row.color ?? (row.amount < 0 ? '#f5f5f4' : '#a3e635'), fontFamily: '"Geist", sans-serif', letterSpacing: '-0.01em' }}>
+                {row.amount < 0 ? `− ${rm(-row.amount)}` : rm(row.amount)}
+              </span>
+            </div>
+          ))}
+
+          {/* Target CC payment input */}
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ ...S.label, flexShrink: 0 }}>CC PAYMENT TARGET</span>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#5b5b59', ...S.mono }}>RM</span>
+              <input
+                type="number"
+                value={targetCcPayment}
+                onChange={e => setTargetCcPayment(e.target.value)}
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                style={{ width: '100%', background: '#0d0d0d', border: '1px solid #222', borderRadius: 6, padding: '5px 8px 5px 28px', fontSize: 12, color: '#f5f5f4', fontFamily: '"JetBrains Mono", monospace', outline: 'none', boxSizing: 'border-box', colorScheme: 'dark' }}
+              />
+            </div>
+          </div>
+
+          {/* Result */}
+          <div style={{ marginTop: 12, padding: '10px 12px', background: remaining < 0 ? 'rgba(239,68,68,0.08)' : 'rgba(163,230,53,0.06)', border: `1px solid ${remaining < 0 ? 'rgba(239,68,68,0.2)' : 'rgba(163,230,53,0.15)'}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: '#9a9a98', ...S.sans }}>Cash remaining</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: remainingColor, fontFamily: '"Geist", sans-serif', letterSpacing: '-0.02em' }}>
+              {remaining < 0 ? `− ${rm(remaining)}` : rm(remaining)}
+            </span>
+          </div>
+
+          {snapshot.ccBillsTotal > 0 && (
+            <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.15)', borderRadius: 8 }}>
+              <span style={{ fontSize: 11, color: '#60a5fa', ...S.sans }}>
+                + {rm(snapshot.ccBillsTotal)} in CC bills are already on your card balance
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Right: BNPL payoff + CC debt */}
+        <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* BNPL payoff timeline */}
+          {snapshot.bnplItems.length > 0 && (
+            <div>
+              <div style={{ ...S.label, marginBottom: 10 }}>BNPL PAYOFF TIMELINE</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {snapshot.bnplItems.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: p.activeThisMonth ? '#f5f5f4' : '#5b5b59', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.merchant}</div>
+                      <div style={{ ...S.label, marginTop: 1 }}>{p.remainingInstallments} left · clears {fmtMonth(p.clearMonth)}</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: p.activeThisMonth ? '#f97316' : '#5b5b59', ...S.mono }}>{rm(p.remainingTotal)}</div>
+                      <div style={{ ...S.label }}>total left</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* CC debt */}
+          {snapshot.ccAccounts.length > 0 && (
+            <div>
+              <div style={{ ...S.label, marginBottom: 10 }}>CC OUTSTANDING</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {snapshot.ccAccounts.map(cc => {
+                  const monthsToClear = ccPayment > 0 ? Math.ceil(cc.outstanding / ccPayment) : null
+                  return (
+                    <div key={cc.id}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: '#f5f5f4', ...S.sans }}>{cc.name}{cc.lastFour ? ` ••${cc.lastFour}` : ''}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', ...S.mono }}>{rm(cc.outstanding)}</span>
+                      </div>
+                      {cc.creditLimit && (
+                        <div style={{ height: 3, background: '#1a1a1a', borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
+                          <div style={{ height: '100%', width: `${Math.min((cc.outstanding / cc.creditLimit) * 100, 100)}%`, background: (cc.utilisationPct ?? 0) > 80 ? '#ef4444' : (cc.utilisationPct ?? 0) > 50 ? '#f97316' : '#a3e635', borderRadius: 2 }} />
+                        </div>
+                      )}
+                      {monthsToClear !== null && (
+                        <div style={{ ...S.label }}>≈ {monthsToClear} month{monthsToClear !== 1 ? 's' : ''} to clear at {rm(ccPayment)}/mo</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {snapshot.ccAccounts.length === 0 && snapshot.bnplItems.length === 0 && (
+            <div style={{ color: '#3a3a3a', fontSize: 12, ...S.sans, textAlign: 'center', paddingTop: 20 }}>No debt data yet</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BillRow({ bill, onToggle, onDelete, toggling, col, faded }: {
   bill: Bill
   onToggle: () => void
@@ -704,11 +905,16 @@ function BillRow({ bill, onToggle, onDelete, toggling, col, faded }: {
       </div>
 
       {/* Name */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 500, color: bill.paid ? '#5b5b59' : '#f5f5f4', ...S.sans, textDecoration: bill.paid ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {bill.name}
-        </span>
-        <span style={{ ...S.label, flexShrink: 0 }}>{ordinal(bill.dueDay)}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 500, color: bill.paid ? '#5b5b59' : '#f5f5f4', ...S.sans, textDecoration: bill.paid ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {bill.name}
+          </span>
+          {bill.paymentMethod === 'credit_card' && (
+            <span style={{ fontSize: 8, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', color: '#60a5fa', border: '1px solid #60a5fa30', borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>CC</span>
+          )}
+        </div>
+        <span style={{ ...S.label }}>{ordinal(bill.dueDay)}</span>
       </div>
 
       {/* Amount */}
