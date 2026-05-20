@@ -100,7 +100,7 @@ export async function POST(request: Request) {
       return Response.json({ error: 'PDF has no selectable text. Try a different file.' }, { status: 422 })
     }
 
-    let parsed: { date: string; merchant: string; amount: number; type: string }[]
+    let parsed: { date: string; merchant: string; amount: number; type: string; ref?: string | null }[]
 
     if (process.env.ANTHROPIC_API_KEY) {
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -110,10 +110,21 @@ export async function POST(request: Request) {
         messages: [
           {
             role: 'user',
-            content: `You are a financial data extractor. Extract all transactions from this credit card statement text.
-Return ONLY a JSON array, no other text. Each item: { date: "YYYY-MM-DD", merchant: string, amount: number (positive), type: "expense" | "income" }.
-Treat payments/credits as income, all purchases as expense.
-Ignore summary rows, balance rows, interest charges labels (keep the amounts).
+            content: `You are a financial data extractor for Malaysian bank/credit card statements.
+Extract every individual transaction. Return ONLY a JSON array, no other text.
+
+Each item must have:
+- date: "YYYY-MM-DD" (the transaction date, not posting date if both present)
+- merchant: string (clean readable name, e.g. "Grab" not "GRAB*GRABFOOD MY 12345")
+- amount: number (always positive)
+- type: "expense" | "income" (payments/credits/refunds = income, purchases/charges = expense)
+- ref: string | null (transaction reference or approval code if shown, else null)
+
+Rules:
+- Keep every transaction including duplicates — if you see the same merchant twice on the same day, include both.
+- Strip noise from merchant names (transaction IDs, city codes, country codes) but keep the core name.
+- Ignore header/footer rows, subtotals, balance brought forward, and statement summary lines.
+- Interest charges and annual fees are expenses; payment received is income.
 
 Statement text:
 ${fullText}`,
@@ -142,12 +153,17 @@ ${fullText}`,
       }
     }
 
-    const transactions = parsed.map((tx) => ({
-      ...tx,
-      importHash: createHash('sha256')
-        .update(`${tx.date}${tx.merchant}${tx.amount}`)
-        .digest('hex'),
-    }))
+    const transactions = parsed.map((tx) => {
+      // Include ref in hash when present so same-merchant same-day same-amount
+      // transactions with different references get distinct hashes.
+      const hashInput = tx.ref
+        ? `${tx.date}${tx.merchant}${tx.amount}${tx.ref}`
+        : `${tx.date}${tx.merchant}${tx.amount}`
+      return {
+        ...tx,
+        importHash: createHash('sha256').update(hashInput).digest('hex'),
+      }
+    })
 
     return Response.json({ transactions, aiPowered: !!process.env.ANTHROPIC_API_KEY })
   } catch (err) {
