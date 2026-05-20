@@ -1,7 +1,26 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (buf: Buffer, opts?: { password?: string }) => Promise<{ text: string }>
+
+async function extractPdfText(buffer: Buffer, password?: string): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getDocument, GlobalWorkerOptions } = require('pdfjs-dist/legacy/build/pdf.mjs')
+  GlobalWorkerOptions.workerSrc = ''
+
+  const loadingTask = getDocument({
+    data: new Uint8Array(buffer),
+    ...(password ? { password } : {}),
+  })
+  const pdf = await loadingTask.promise
+
+  let text = ''
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const content = await page.getTextContent()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    text += content.items.map((item: any) => ('str' in item ? item.str : '')).join(' ') + '\n'
+  }
+  return text
+}
 
 function parseTransactionsFromText(
   text: string,
@@ -58,8 +77,7 @@ export async function POST(request: Request) {
 
     let fullText: string
     try {
-      const data = await pdfParse(buffer, password ? { password } : undefined)
-      fullText = data.text
+      fullText = await extractPdfText(buffer, password || undefined)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       return Response.json({ error: `Failed to read PDF: ${msg}` }, { status: 422 })
