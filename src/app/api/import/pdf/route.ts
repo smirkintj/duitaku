@@ -1,21 +1,45 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
 
-async function extractPdfText(buffer: Buffer, password?: string): Promise<string> {
-  // pdfjs-dist is in serverExternalPackages so it runs as a real Node module, not bundled.
-  // Using dynamic import (ESM) to get the actual module exports.
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+// pdfjs-dist references browser globals at module-load time.
+// Stub them before the dynamic import so the module initialises cleanly in Node.
+function polyfillForPdfjs() {
+  const g = globalThis as Record<string, unknown>
+  if (!g.DOMMatrix) {
+    g.DOMMatrix = class DOMMatrix {
+      a=1; b=0; c=0; d=1; e=0; f=0
+      m11=1; m12=0; m13=0; m14=0
+      m21=0; m22=1; m23=0; m24=0
+      m31=0; m32=0; m33=1; m34=0
+      m41=0; m42=0; m43=0; m44=1
+      is2D=true; isIdentity=true
+    }
+  }
+  if (!g.Path2D) g.Path2D = class Path2D {}
+  if (!g.ImageData) {
+    g.ImageData = class ImageData {
+      data: Uint8ClampedArray; width: number; height: number
+      constructor(w: number, h: number) {
+        this.width = w; this.height = h
+        this.data = new Uint8ClampedArray(w * h * 4)
+      }
+    }
+  }
+}
 
-  // Point workerSrc to the worker file so pdfjs can use a worker_thread in Node.
-  // Using a file:// URL ensures Node resolves it correctly outside of webpack bundling.
-  const { createRequire } = await import('module')
-  const require = createRequire(import.meta.url)
-  const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
-  pdfjs.GlobalWorkerOptions.workerSrc = `file://${workerPath}`
+async function extractPdfText(buffer: Buffer, password?: string): Promise<string> {
+  polyfillForPdfjs()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const loadingTask = (pdfjs as any).getDocument({
+  const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs')
+
+  // Empty string = FakeWorker: pdfjs runs the worker code in the same thread.
+  // This avoids needing a Worker / worker_threads in serverless.
+  pdfjs.GlobalWorkerOptions.workerSrc = ''
+
+  const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(buffer),
+    useSystemFonts: true,
     ...(password ? { password } : {}),
   })
 
@@ -89,7 +113,6 @@ export async function POST(request: Request) {
       fullText = await extractPdfText(buffer, password)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      // Surface password errors clearly so the frontend can prompt the user
       if (msg.includes('No password') || msg.includes('NEED_PASSWORD')) {
         return Response.json({ error: 'This PDF is password-protected. Enter the password and try again.', needsPassword: true }, { status: 422 })
       }
