@@ -1,57 +1,31 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
 
-// pdfjs-dist references browser globals at module-load time.
-// Stub them before the dynamic import so the module initialises cleanly in Node.
-function polyfillForPdfjs() {
-  const g = globalThis as Record<string, unknown>
-  if (!g.DOMMatrix) {
-    g.DOMMatrix = class DOMMatrix {
-      a=1; b=0; c=0; d=1; e=0; f=0
-      m11=1; m12=0; m13=0; m14=0
-      m21=0; m22=1; m23=0; m24=0
-      m31=0; m32=0; m33=1; m34=0
-      m41=0; m42=0; m43=0; m44=1
-      is2D=true; isIdentity=true
-    }
-  }
-  if (!g.Path2D) g.Path2D = class Path2D {}
-  if (!g.ImageData) {
-    g.ImageData = class ImageData {
-      data: Uint8ClampedArray; width: number; height: number
-      constructor(w: number, h: number) {
-        this.width = w; this.height = h
-        this.data = new Uint8ClampedArray(w * h * 4)
-      }
-    }
-  }
-}
-
 async function extractPdfText(buffer: Buffer, password?: string): Promise<string> {
-  polyfillForPdfjs()
+  // Use pdf-parse's own bundled pdfjs v1.10.100 — it already sets disableWorker=true
+  // and is proven to work in Node.js without browser globals or worker setup.
+  // We bypass pdf-parse's wrapper only to pass the password, which it ignores.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const PDFJS = require('pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js')
+  PDFJS.disableWorker = true
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs')
-
-  // Empty string = FakeWorker: pdfjs runs the worker code in the same thread.
-  // This avoids needing a Worker / worker_threads in serverless.
-  pdfjs.GlobalWorkerOptions.workerSrc = ''
-
-  const loadingTask = pdfjs.getDocument({
+  const doc = await PDFJS.getDocument({
     data: new Uint8Array(buffer),
-    useSystemFonts: true,
     ...(password ? { password } : {}),
   })
 
-  const pdf = await loadingTask.promise
-
   let text = ''
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i)
     const content = await page.getTextContent()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    text += content.items.map((item: any) => ('str' in item ? item.str : '')).join(' ') + '\n'
+    for (const item of content.items as any[]) {
+      text += item.str ?? ''
+    }
+    text += '\n'
   }
+
+  doc.destroy()
   return text
 }
 
