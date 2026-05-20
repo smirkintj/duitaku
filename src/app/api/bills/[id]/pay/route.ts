@@ -1,6 +1,7 @@
 import { db } from '@/db'
 import { financeBillPayments, financeBills, financeTransactions } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
+import { createHash } from 'crypto'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -19,6 +20,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   let transactionId: string | null = null
   if (bill.paymentMethod !== 'credit_card') {
     const today = new Date().toISOString().slice(0, 10)
+    // Store importHash using the same formula as PDF import so the same
+    // transaction arriving via PDF statement is caught as a duplicate.
+    const importHash = createHash('sha256')
+      .update(`${today}${bill.name}${bill.amount}`)
+      .digest('hex')
     const [tx] = await db.insert(financeTransactions).values({
       amount: bill.amount,
       date: today,
@@ -27,6 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       categoryId: bill.categoryId ?? null,
       accountId: bill.accountId ?? null,
       isRecurring: true,
+      importHash,
     }).returning()
     transactionId = tx.id
   }

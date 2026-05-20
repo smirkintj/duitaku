@@ -18,6 +18,7 @@ interface ReviewRow extends ParsedTx {
   _id: number
   excluded: boolean
   editing: boolean
+  duplicate: boolean  // flagged as likely already in the system
 }
 
 interface Category {
@@ -65,10 +66,25 @@ export default function ImportPage() {
       }
 
       setNeedsPassword(false)
-      setRows((data.transactions ?? []).map((tx, i) => ({ ...tx, _id: i, excluded: false, editing: false })))
+      const parsed = data.transactions ?? []
+      const initialRows: ReviewRow[] = parsed.map((tx, i) => ({ ...tx, _id: i, excluded: false, editing: false, duplicate: false }))
+      setRows(initialRows)
 
-      const catsRes = await fetch('/api/categories')
+      const [catsRes, dupRes] = await Promise.all([
+        fetch('/api/categories'),
+        fetch('/api/import/check-duplicates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactions: initialRows }),
+        }),
+      ])
       setCategories(await catsRes.json())
+
+      const { duplicateIds } = await dupRes.json() as { duplicateIds: number[] }
+      if (duplicateIds.length > 0) {
+        const dupSet = new Set(duplicateIds)
+        setRows(prev => prev.map(r => dupSet.has(r._id) ? { ...r, duplicate: true, excluded: true } : r))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed')
     } finally {
@@ -81,6 +97,7 @@ export default function ImportPage() {
   }, [])
 
   const included = rows.filter(r => !r.excluded)
+  const autoExcluded = rows.filter(r => r.duplicate).length
   const totalExpense = included.filter(r => r.type === 'expense').reduce((a, r) => a + r.amount, 0)
   const totalIncome = included.filter(r => r.type === 'income').reduce((a, r) => a + r.amount, 0)
 
@@ -153,9 +170,11 @@ export default function ImportPage() {
               {/* Summary bar */}
               <div style={{ padding: '16px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>{included.length} of {rows.length} transactions selected</span>
-                  {rows.length - included.length > 0 && (
-                    <span style={{ fontSize: 12, color: '#5b5b59', ...S.sans, marginLeft: 8 }}>{rows.length - included.length} excluded</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>{included.length} of {rows.length} selected</span>
+                  {autoExcluded > 0 && (
+                    <span style={{ fontSize: 11, ...S.mono, color: '#fbbf24', marginLeft: 10, background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: 5, padding: '2px 7px' }}>
+                      {autoExcluded} already recorded
+                    </span>
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: 20 }}>
@@ -276,13 +295,19 @@ function ReviewRowItem({ row, categories, onUpdate }: {
         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
 
-      {/* Type toggle */}
-      <button
-        onClick={() => onUpdate(row._id, { type: row.type === 'expense' ? 'income' : 'expense' })}
-        style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: row.type === 'income' ? '#a3e635' : '#7a7a78', border: `1px solid ${row.type === 'income' ? 'rgba(163,230,53,0.3)' : '#222'}`, borderRadius: 5, padding: '3px 7px', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}
-      >
-        {row.type.toUpperCase()}
-      </button>
+      {/* Type toggle / duplicate badge */}
+      {row.duplicate && row.excluded ? (
+        <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 5, padding: '3px 7px', whiteSpace: 'nowrap' }}>
+          DUPLICATE
+        </span>
+      ) : (
+        <button
+          onClick={() => onUpdate(row._id, { type: row.type === 'expense' ? 'income' : 'expense' })}
+          style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: row.type === 'income' ? '#a3e635' : '#7a7a78', border: `1px solid ${row.type === 'income' ? 'rgba(163,230,53,0.3)' : '#222'}`, borderRadius: 5, padding: '3px 7px', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          {row.type.toUpperCase()}
+        </button>
+      )}
 
       {/* Edit / done */}
       <button
