@@ -30,6 +30,7 @@ type IconName =
   | 'piggy'
   | 'invest'
   | 'loans'
+  | 'merchant'
 
 type CategoryIconName =
   | 'bag'
@@ -227,6 +228,14 @@ export function Icon({ name, width = 20, height = 20, className, style }: NamedI
           <path d="M3 6h18M3 12h12M3 18h8" />
           <circle cx="19" cy="17" r="3.5" />
           <path d="M19 15.5v1.5l1 1" />
+        </svg>
+      )
+    case 'merchant':
+      return (
+        <svg {...common}>
+          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <path d="M16 10a4 4 0 0 1-8 0" />
         </svg>
       )
     default:

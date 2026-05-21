@@ -12,6 +12,7 @@ import RedFlagClient from '@/components/finance/RedFlagClient'
 import DashboardClient from '@/components/finance/DashboardClient'
 import SalarySetupCard from '@/components/finance/SalarySetupCard'
 import NetWorthWidget from '@/components/finance/NetWorthWidget'
+import RecurringSuggestions from '@/components/finance/RecurringSuggestions'
 import { computeRedFlags } from '@/lib/red-flags'
 import { getPayCycle, getCurrentBaseMonth, getDayInCycle, prevCycleMonth } from '@/lib/pay-cycle'
 
@@ -170,6 +171,7 @@ export default async function HomePage({ searchParams }: PageProps) {
         categoryId: financeTransactions.categoryId,
         type: financeTransactions.type,
         date: financeTransactions.date,
+        merchant: financeTransactions.merchant,
       })
       .from(financeTransactions)
       .where(
@@ -264,6 +266,23 @@ export default async function HomePage({ searchParams }: PageProps) {
     }
   })
 
+  // Merchant anomalies for red flags: group current cycle expenses by merchant
+  const merchantSpend = new Map<string, number>()
+  for (const tx of expenseTxs) {
+    const key = (tx.merchant ?? 'Unknown').trim()
+    merchantSpend.set(key, (merchantSpend.get(key) ?? 0) + tx.amount)
+  }
+  const merchantPrior = new Map<string, number>()
+  for (const tx of prior3Txs.filter(t => t.type === 'expense')) {
+    const key = (tx.merchant ?? 'Unknown').trim()
+    merchantPrior.set(key, (merchantPrior.get(key) ?? 0) + tx.amount)
+  }
+  const merchantAnomalies = Array.from(merchantSpend.entries()).map(([merchant, currentTotal]) => ({
+    merchant,
+    currentTotal,
+    prev3avg: merchantPrior.has(merchant) ? (merchantPrior.get(merchant)! / 3) : 0,
+  }))
+
   // Red flags
   const flagInput = categoryStats.map((c) => ({
     name: c.name,
@@ -273,7 +292,7 @@ export default async function HomePage({ searchParams }: PageProps) {
     isSubscription: c.isSubscription,
     prevMonthTotal: c.prevMonthTotal,
   }))
-  const flags = computeRedFlags(salary, remaining, flagInput, expenseTxs)
+  const flags = computeRedFlags(salary, remaining, flagInput, expenseTxs, merchantAnomalies, projectedRemaining, daysIn - dayOfMonth)
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -299,6 +318,8 @@ export default async function HomePage({ searchParams }: PageProps) {
           }}
         >
           {flags.length > 0 && <RedFlagClient flags={flags} />}
+
+          <RecurringSuggestions />
 
           <NetWorthWidget month={monthStr} />
 

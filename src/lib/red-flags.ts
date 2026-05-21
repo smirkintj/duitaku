@@ -15,11 +15,20 @@ interface CategoryStats {
   prevMonthTotal?: number
 }
 
+interface MerchantAnomaly {
+  merchant: string
+  currentTotal: number
+  prev3avg: number
+}
+
 export function computeRedFlags(
   salary: number,
   remaining: number,
   categories: CategoryStats[],
-  transactions: { amount: number; type: string }[],
+  transactions: { amount: number; type: string; merchant?: string | null; date?: string }[],
+  merchantAnomalies?: MerchantAnomaly[],
+  projectedRemaining?: number,
+  daysLeft?: number,
 ): RedFlag[] {
   const flags: RedFlag[] = []
 
@@ -96,7 +105,37 @@ export function computeRedFlags(
         detail: `A single transaction of RM ${tx.amount.toFixed(2)} exceeds 20% of your monthly salary.`,
         tip: 'Verify this purchase was intentional and budgeted for.',
       })
-      break // only flag once to avoid spam
+      break
+    }
+  }
+
+  // 5. Merchant-level anomalies (spending 2× or more vs 3-cycle avg)
+  if (merchantAnomalies) {
+    for (const m of merchantAnomalies) {
+      if (m.prev3avg > 0 && m.currentTotal >= m.prev3avg * 2) {
+        const pct = Math.round(((m.currentTotal - m.prev3avg) / m.prev3avg) * 100)
+        flags.push({
+          title: `${m.merchant} spend spike`,
+          metric: `+${pct}%`,
+          detail: `RM ${m.currentTotal.toFixed(2)} at ${m.merchant} this cycle — ${(m.currentTotal / m.prev3avg).toFixed(1)}× your usual RM ${m.prev3avg.toFixed(2)}.`,
+          tip: `Check your recent ${m.merchant} transactions — this may be an unexpected charge.`,
+          tone: 'warn',
+        })
+      }
+    }
+  }
+
+  // 6. Projection alert: projected remaining < 5% of salary with more than 5 days left
+  if (projectedRemaining !== undefined && daysLeft !== undefined && salary > 0 && daysLeft > 5) {
+    const projPct = projectedRemaining / salary
+    if (projPct < 0.05) {
+      flags.push({
+        title: 'On track to overdraw',
+        metric: `${Math.round(projPct * 100)}% projected`,
+        detail: `At your current daily spending rate, you'll have only RM ${projectedRemaining.toFixed(2)} left at cycle end with ${daysLeft} days to go.`,
+        tip: 'Reduce variable spending now to avoid going into deficit before payday.',
+        tone: 'danger',
+      })
     }
   }
 
