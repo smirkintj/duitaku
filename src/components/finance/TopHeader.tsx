@@ -14,6 +14,8 @@ interface TopHeaderProps {
   cycleLabel?: string
   onAdd?: () => void
   onPayday?: () => void
+  onSearch?: () => void
+  onAfford?: () => void
   hasPaidThisMonth?: boolean
 }
 
@@ -64,7 +66,7 @@ function EyeOffIcon() {
   )
 }
 
-export default function TopHeader({ remaining, month, cycleLabel, onAdd, onPayday, hasPaidThisMonth }: TopHeaderProps) {
+export default function TopHeader({ remaining, month, cycleLabel, onAdd, onPayday, onSearch, onAfford, hasPaidThisMonth }: TopHeaderProps) {
   const router = useRouter()
   const monthLabel = cycleLabel ?? formatMonthLabel(month)
   const [hidden, togglePrivacy] = usePrivacyMode()
@@ -231,6 +233,8 @@ export default function TopHeader({ remaining, month, cycleLabel, onAdd, onPayda
 
         {/* Search */}
         <button
+          onClick={onSearch}
+          title="Search transactions (⌘K)"
           style={{
             width: 36,
             height: 36,
@@ -277,6 +281,25 @@ export default function TopHeader({ remaining, month, cycleLabel, onAdd, onPayda
             }}
           />
         </button>
+
+        {/* Can I afford this? */}
+        {onAfford && (
+          <button
+            onClick={onAfford}
+            title="Can I afford this? (⌘J)"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'transparent',
+              color: '#7a7a78',
+              border: '1px solid #1f1f1f',
+              borderRadius: 9, padding: '0 12px', height: 36,
+              cursor: 'pointer', fontSize: 12, fontWeight: 500,
+              fontFamily: '"Geist", -apple-system, sans-serif',
+            }}
+          >
+            Can I afford this?
+          </button>
+        )}
 
         {/* Payday button — shown when income not yet recorded */}
         {!hasPaidThisMonth && onPayday && (

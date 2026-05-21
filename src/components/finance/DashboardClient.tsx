@@ -3,6 +3,8 @@
 import React, { useState, useCallback } from 'react'
 import TopHeader from './TopHeader'
 import PaydayModal from './PaydayModal'
+import SearchModal from './SearchModal'
+import AffordModal from './AffordModal'
 import { useRouter } from 'next/navigation'
 
 interface DashboardClientProps {
@@ -12,13 +14,27 @@ interface DashboardClientProps {
   cycleLabel?: string
   hasPaidThisMonth: boolean
   salaryDefault: number
+  projectedRemaining: number
+  daysLeft: number
 }
 
-export default function DashboardClient({ remaining, salary, month, cycleLabel, hasPaidThisMonth, salaryDefault }: DashboardClientProps) {
+export default function DashboardClient({ remaining, salary, month, cycleLabel, hasPaidThisMonth, salaryDefault, projectedRemaining, daysLeft }: DashboardClientProps) {
   const [showPayday, setShowPayday] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [showAfford, setShowAfford] = useState(false)
   const router = useRouter()
 
   const refresh = useCallback(() => router.refresh(), [router])
+
+  // Global keyboard shortcuts
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setShowSearch(true) }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'j') { e.preventDefault(); setShowAfford(true) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   return (
     <>
@@ -29,6 +45,8 @@ export default function DashboardClient({ remaining, salary, month, cycleLabel, 
         cycleLabel={cycleLabel}
         onAdd={() => window.dispatchEvent(new CustomEvent('open-add-modal'))}
         onPayday={() => setShowPayday(true)}
+        onSearch={() => setShowSearch(true)}
+        onAfford={() => setShowAfford(true)}
         hasPaidThisMonth={hasPaidThisMonth}
       />
       {showPayday && (
@@ -36,6 +54,15 @@ export default function DashboardClient({ remaining, salary, month, cycleLabel, 
           defaultAmount={salaryDefault}
           onClose={() => setShowPayday(false)}
           onSaved={() => { setShowPayday(false); refresh() }}
+        />
+      )}
+      {showSearch && <SearchModal onClose={() => setShowSearch(false)} />}
+      {showAfford && (
+        <AffordModal
+          remaining={remaining}
+          projectedRemaining={projectedRemaining}
+          daysLeft={daysLeft}
+          onClose={() => setShowAfford(false)}
         />
       )}
     </>

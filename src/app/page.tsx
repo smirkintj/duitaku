@@ -138,6 +138,11 @@ export default async function HomePage({ searchParams }: PageProps) {
   // Buffer = what's free after all commitments + variable spending
   const remaining = Math.max(0, income - committedTotal - variableSpent - saved)
 
+  // End-of-cycle projection: extrapolate variable spend from daily average
+  const avgDailyVar = dayOfMonth > 0 ? variableSpent / dayOfMonth : 0
+  const projectedVarTotal = avgDailyVar * daysIn
+  const projectedRemaining = Math.max(0, income - committedTotal - projectedVarTotal - saved)
+
   // Daily spend array (indexed by position in cycle, not calendar day)
   const dailySpend: number[] = Array(daysIn).fill(0)
   for (const tx of expenseTxs) {
@@ -281,6 +286,8 @@ export default async function HomePage({ searchParams }: PageProps) {
           cycleLabel={cycleLabel}
           hasPaidThisMonth={hasPaidThisMonth}
           salaryDefault={salaryDefault}
+          projectedRemaining={projectedRemaining}
+          daysLeft={daysIn - dayOfMonth}
         />
         <main
           style={{
@@ -325,6 +332,8 @@ export default async function HomePage({ searchParams }: PageProps) {
               saved={saved}
               dayOfMonth={dayOfMonth}
               daysIn={daysIn}
+              projectedRemaining={projectedRemaining}
+              isCurrentCycle={isCurrentCycle}
             />
           </div>
 

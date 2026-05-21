@@ -16,6 +16,8 @@ interface StatsColumnProps {
   saved: number
   dayOfMonth: number
   daysIn: number
+  projectedRemaining: number
+  isCurrentCycle: boolean
 }
 
 function Bucket({
@@ -95,6 +97,8 @@ export default function StatsColumn({
   saved,
   dayOfMonth,
   daysIn,
+  projectedRemaining,
+  isCurrentCycle,
 }: StatsColumnProps) {
   const [hidden] = usePrivacyMode()
 
@@ -112,6 +116,9 @@ export default function StatsColumn({
     : bufferPct >= 10
       ? 'tight — watch variable spend'
       : 'very tight this month'
+
+  const projPct = pct(projectedRemaining)
+  const projColor = projPct >= 20 ? '#a3e635' : projPct >= 10 ? '#fbbf24' : '#ef4444'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -132,7 +139,7 @@ export default function StatsColumn({
         hidden={hidden}
       />
       <Bucket
-        label="BUFFER"
+        label="BUFFER NOW"
         amount={remaining}
         pct={bufferPct}
         barColor={bufferPct >= 20 ? '#a3e635' : bufferPct >= 10 ? '#fbbf24' : '#ef4444'}
@@ -140,6 +147,35 @@ export default function StatsColumn({
         hidden={hidden}
         highlight
       />
+      {isCurrentCycle && (
+        <div style={{
+          borderRadius: 14,
+          border: `1px solid ${projColor}20`,
+          background: `${projColor}06`,
+          padding: '12px 16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <div>
+            <div style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.08em', marginBottom: 4 }}>PROJECTED BUFFER</div>
+            {hidden ? (
+              <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 18, color: '#5b5b59', letterSpacing: '0.1em' }}>••••••</span>
+            ) : (
+              <span style={{ fontFamily: '"Geist", -apple-system, sans-serif', fontWeight: 700, fontSize: 22, color: projColor, letterSpacing: '-0.03em' }}>
+                RM {formatRM(projectedRemaining)}
+              </span>
+            )}
+            <div style={{ fontSize: 11, color: '#5b5b59', fontFamily: '"Geist", -apple-system, sans-serif', marginTop: 3 }}>
+              at end of cycle · day {daysIn}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#3a3a3a', letterSpacing: '0.06em' }}>{Math.round(projPct)}%</div>
+            <div style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#3a3a3a', marginTop: 2 }}>of salary</div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
