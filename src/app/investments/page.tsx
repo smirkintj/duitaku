@@ -100,6 +100,12 @@ export default function InvestmentsPage() {
   // Credential check
   const [kucoinConfigured, setKucoinConfigured] = useState(false)
 
+  // EPF import state
+  const [epfParsing, setEpfParsing] = useState(false)
+  const [epfResult, setEpfResult] = useState<{ account1Balance: number; account2Balance: number; account3Balance: number; totalBalance: number; asOf: string; memberName: string | null; annualDividendRate: number | null } | null>(null)
+  const [epfError, setEpfError] = useState<string | null>(null)
+  const epfFileRef = React.useRef<HTMLInputElement>(null)
+
   // Modals
   const [showAdd, setShowAdd] = useState(false)
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null)
@@ -130,6 +136,55 @@ export default function InvestmentsPage() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { checkKucoin() }, [checkKucoin])
+
+  async function handleEpfUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setEpfParsing(true)
+    setEpfError(null)
+    setEpfResult(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await fetch('/api/investments/epf-import', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) { setEpfError(data.error ?? 'Failed to parse EPF statement'); return }
+      setEpfResult(data)
+    } catch { setEpfError('Network error') }
+    finally { setEpfParsing(false) }
+  }
+
+  async function applyEpfResult() {
+    if (!epfResult) return
+    // Find existing EPF investment entries or create new ones
+    const epfInvestments = investments.filter(i => i.type === 'epf')
+    if (epfInvestments.length === 1) {
+      // Update the single EPF entry with total balance
+      await fetch(`/api/investments/${epfInvestments[0].id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentValue: epfResult.totalBalance }),
+      })
+    } else if (epfInvestments.length === 0) {
+      // Create a new EPF entry
+      await fetch('/api/investments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'EPF / KWSP',
+          type: 'epf',
+          provider: 'KWSP',
+          costBasis: epfResult.totalBalance,
+          currentValue: epfResult.totalBalance,
+          currency: 'MYR',
+          notes: epfResult.memberName ? `Member: ${epfResult.memberName}` : undefined,
+        }),
+      })
+    }
+    setEpfResult(null)
+    await load()
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -309,6 +364,65 @@ export default function InvestmentsPage() {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* EPF statement import */}
+          <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '16px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <div style={{ ...S.label, marginBottom: 4 }}>EPF / KWSP STATEMENT IMPORT</div>
+                <p style={{ fontSize: 12, color: '#5b5b59', ...S.sans, margin: 0 }}>Upload your EPF statement PDF to sync Akaun 1, 2 & 3 balances automatically.</p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                {epfError && <span style={{ fontSize: 12, color: '#ef4444', ...S.sans }}>{epfError}</span>}
+                <input ref={epfFileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handleEpfUpload} />
+                <button
+                  onClick={() => epfFileRef.current?.click()}
+                  disabled={epfParsing}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, background: epfParsing ? '#1a1a1a' : 'rgba(245,158,11,0.1)', color: epfParsing ? '#3a3a3a' : '#f59e0b', border: `1px solid ${epfParsing ? '#222' : 'rgba(245,158,11,0.3)'}`, borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: epfParsing ? 'not-allowed' : 'pointer', ...S.sans }}
+                >
+                  {epfParsing ? 'Reading…' : 'Upload EPF PDF'}
+                </button>
+              </div>
+            </div>
+            {epfResult && (
+              <div style={{ marginTop: 14, background: '#0d0d0d', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'AKAUN 1', value: epfResult.account1Balance },
+                      { label: 'AKAUN 2', value: epfResult.account2Balance },
+                      ...(epfResult.account3Balance > 0 ? [{ label: 'AKAUN 3', value: epfResult.account3Balance }] : []),
+                      { label: 'TOTAL', value: epfResult.totalBalance },
+                    ].map(s => (
+                      <div key={s.label}>
+                        <div style={{ ...S.label, marginBottom: 4 }}>{s.label}</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b', ...S.mono }}>{fmtMYR(s.value)}</div>
+                      </div>
+                    ))}
+                    {epfResult.annualDividendRate && (
+                      <div>
+                        <div style={{ ...S.label, marginBottom: 4 }}>DIVIDEND</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#a3e635', ...S.mono }}>{epfResult.annualDividendRate}%</div>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: '#5b5b59', ...S.mono }}>as of {epfResult.asOf}</span>
+                    <button
+                      onClick={applyEpfResult}
+                      style={{ background: '#f59e0b', color: '#0d0d0d', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', ...S.sans }}>
+                      Sync to portfolio
+                    </button>
+                    <button
+                      onClick={() => setEpfResult(null)}
+                      style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '7px 10px', fontSize: 12, color: '#5b5b59', cursor: 'pointer', ...S.sans }}>
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Investments grid */}

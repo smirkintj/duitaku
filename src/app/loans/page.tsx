@@ -81,9 +81,46 @@ const labelStyle: React.CSSProperties = {
   display: 'block',
 }
 
+// Amortization: compute payoff months and total interest saved with extra payment
+function whatIfCalc(outstanding: number, monthly: number, rate: number, extra: number) {
+  if (monthly <= 0) return null
+  const monthlyRate = rate / 100 / 12
+
+  function monthsToPayoff(extraMonthly: number): { months: number; totalInterest: number } {
+    if (monthlyRate <= 0) {
+      const months = Math.ceil(outstanding / (monthly + extraMonthly))
+      return { months, totalInterest: 0 }
+    }
+    let balance = outstanding
+    let months = 0
+    let totalInterest = 0
+    while (balance > 0.01 && months < 600) {
+      const interest = balance * monthlyRate
+      totalInterest += interest
+      const payment = Math.min(monthly + extraMonthly, balance + interest)
+      balance = balance + interest - payment
+      months++
+    }
+    return { months, totalInterest }
+  }
+
+  const base = monthsToPayoff(0)
+  const with_ = monthsToPayoff(extra)
+  return {
+    baseMonths: base.months,
+    withMonths: with_.months,
+    savedMonths: base.months - with_.months,
+    savedInterest: Math.max(0, base.totalInterest - with_.totalInterest),
+  }
+}
+
 export default function LoansPage() {
   const [loans, setLoans] = useState<Loan[]>([])
   const [loading, setLoading] = useState(true)
+
+  // What-if state
+  const [whatIfLoan, setWhatIfLoan] = useState<Loan | null>(null)
+  const [extraPayment, setExtraPayment] = useState('')
 
   // Modal state
   const [showModal, setShowModal] = useState(false)
@@ -422,6 +459,66 @@ export default function LoansPage() {
                   )
                 })}
               </div>
+            </div>
+          )}
+          {/* What-If Calculator */}
+          {loans.length > 0 && (
+            <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '20px 24px' }}>
+              <div style={{ ...S.label, marginBottom: 14 }}>LOAN WHAT-IF CALCULATOR</div>
+              <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: '0 0 16px', lineHeight: 1.5 }}>
+                See how an extra monthly payment shortens your loan and reduces interest paid.
+              </p>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={labelStyle}>LOAN</label>
+                  <select
+                    value={whatIfLoan?.id ?? ''}
+                    onChange={e => setWhatIfLoan(loans.find(l => l.id === e.target.value) ?? null)}
+                    style={{ ...inputStyle, cursor: 'pointer' }}
+                  >
+                    <option value="">Select a loan…</option>
+                    {loans.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+                <div style={{ width: 160 }}>
+                  <label style={labelStyle}>EXTRA MONTHLY (RM)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={extraPayment}
+                    onChange={e => setExtraPayment(e.target.value)}
+                    placeholder="e.g. 200"
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+              {(() => {
+                if (!whatIfLoan) return null
+                const extra = parseFloat(extraPayment) || 0
+                const rate = whatIfLoan.interestRate ?? 0
+                const result = whatIfCalc(whatIfLoan.outstandingBalance, whatIfLoan.monthlyInstallment, rate, extra)
+                if (!result) return null
+                const basePay = payoffDate(result.baseMonths)
+                const withPay = payoffDate(result.withMonths)
+                const color = result.savedMonths > 0 ? '#a3e635' : '#7a7a78'
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                    {[
+                      { label: 'CURRENT PAYOFF', value: `${basePay.label}`, sub: `${result.baseMonths} months` },
+                      { label: extra > 0 ? `WITH +RM ${formatRM(extra, 0)}/MO` : 'PAYOFF WITH EXTRA', value: extra > 0 ? withPay.label : '—', sub: extra > 0 ? `${result.withMonths} months` : 'Enter an amount above', color: extra > 0 ? color : undefined },
+                      { label: 'MONTHS SAVED', value: extra > 0 ? String(result.savedMonths) : '—', sub: extra > 0 && result.savedMonths > 0 ? `${Math.floor(result.savedMonths / 12)}y ${result.savedMonths % 12}m earlier` : '', color: extra > 0 ? color : undefined },
+                      { label: 'INTEREST SAVED', value: extra > 0 && rate > 0 ? `RM ${formatRM(result.savedInterest)}` : '—', sub: rate > 0 ? '' : 'add interest rate to loan', color: extra > 0 && rate > 0 ? color : undefined },
+                    ].map(s => (
+                      <div key={s.label} style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 10, padding: '12px 16px' }}>
+                        <div style={{ ...S.label, marginBottom: 6 }}>{s.label}</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: s.color ?? '#f5f5f4', ...S.sans }}>{s.value}</div>
+                        {s.sub && <div style={{ fontSize: 11, color: '#5b5b59', ...S.mono, marginTop: 3 }}>{s.sub}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
           )}
         </div>
