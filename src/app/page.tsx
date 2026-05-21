@@ -1,6 +1,6 @@
 import React from 'react'
 import { db } from '@/db'
-import { financeTransactions, financeCategories, financeSalary, financeBills, financeBnpl, financeBillPayments, userSettings } from '@/db/schema'
+import { financeTransactions, financeCategories, financeSalary, financeBills, financeBnpl, financeBillPayments, userSettings, financeAccounts } from '@/db/schema'
 import { and, gte, lte, desc, eq } from 'drizzle-orm'
 import SidebarClient from '@/components/finance/SidebarClient'
 import HeroRemaining from '@/components/finance/HeroRemaining'
@@ -62,7 +62,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const dayOfMonth = isCurrentCycle ? getDayInCycle(now, startDate, daysIn) : daysIn
 
   // Fetch in parallel
-  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth] = await Promise.all([
+  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth, ccAccountRows] = await Promise.all([
     db
       .select()
       .from(financeSalary)
@@ -79,6 +79,7 @@ export default async function HomePage({ searchParams }: PageProps) {
         note: financeTransactions.note,
         categoryId: financeTransactions.categoryId,
         isRecurring: financeTransactions.isRecurring,
+        accountId: financeTransactions.accountId,
       })
       .from(financeTransactions)
       .where(and(gte(financeTransactions.date, startDate), lte(financeTransactions.date, endDate))),
@@ -86,6 +87,7 @@ export default async function HomePage({ searchParams }: PageProps) {
     db.select().from(financeBills).where(eq(financeBills.isActive, true)),
     db.select().from(financeBnpl).where(eq(financeBnpl.isActive, true)),
     db.select().from(financeBillPayments).where(eq(financeBillPayments.month, baseMonth)),
+    db.select({ id: financeAccounts.id }).from(financeAccounts).where(eq(financeAccounts.type, 'credit')),
   ])
 
   const salaryDefault = salaryRows[0]?.amount ?? 0
@@ -117,10 +119,11 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   // Committed outflows: cash bills (non-CC) + active BNPL installments
   const paidBillIds = new Set(billPaymentsThisMonth.map(p => p.billId))
-  const cashBills = activeBills.filter(b => b.paymentMethod !== 'credit_card')
-  const committedBills = cashBills.reduce((a, b) => a + b.amount, 0)
-  const billsPaidCount = cashBills.filter(b => paidBillIds.has(b.id)).length
-  const billsCashCount = cashBills.length
+  // Include all bills (cash + CC statement payments) in committed
+  const committedBills = activeBills.reduce((a, b) => a + b.amount, 0)
+  const billsPaidCount = activeBills.filter(b => paidBillIds.has(b.id)).length
+  const billsCashCount = activeBills.length
+  const ccBillsCount = activeBills.filter(b => b.paymentMethod === 'credit_card').length
 
   const nowIdx = cycleYear * 12 + cycleMonth
   const activeBnplThisMonth = activeBnpl.filter(p => {
@@ -131,9 +134,13 @@ export default async function HomePage({ searchParams }: PageProps) {
   const committedBnpl = activeBnplThisMonth.reduce((a, p) => a + p.installmentAmount, 0)
   const committedTotal = committedBills + committedBnpl
 
-  // Variable spending = non-recurring expense transactions (what you chose to spend)
+  // Split variable spending: CC charges are deferred (not cash outflow now)
+  const ccAccountIds = new Set(ccAccountRows.map(a => a.id))
   const variableTxs = spendTxs.filter(t => !t.isRecurring)
-  const variableSpent = variableTxs.reduce((a, t) => a + t.amount, 0)
+  const cashVariableTxs = variableTxs.filter(t => !t.accountId || !ccAccountIds.has(t.accountId))
+  const ccVariableTxs = variableTxs.filter(t => t.accountId && ccAccountIds.has(t.accountId))
+  const variableSpent = cashVariableTxs.reduce((a, t) => a + t.amount, 0)
+  const ccCharges = ccVariableTxs.reduce((a, t) => a + t.amount, 0)
   const spent = spendTxs.reduce((a, t) => a + t.amount, 0) // kept for backwards compat (daily chart)
 
   // Buffer = what's free after all commitments + variable spending
@@ -348,7 +355,9 @@ export default async function HomePage({ searchParams }: PageProps) {
               committedBnpl={committedBnpl}
               billsPaidCount={billsPaidCount}
               billsCashCount={billsCashCount}
+              ccBillsCount={ccBillsCount}
               variableSpent={variableSpent}
+              ccCharges={ccCharges}
               remaining={remaining}
               saved={saved}
               dayOfMonth={dayOfMonth}

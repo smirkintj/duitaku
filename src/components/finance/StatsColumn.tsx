@@ -11,7 +11,9 @@ interface StatsColumnProps {
   committedBnpl: number
   billsPaidCount: number
   billsCashCount: number
+  ccBillsCount: number
   variableSpent: number
+  ccCharges: number
   remaining: number
   saved: number
   dayOfMonth: number
@@ -92,7 +94,9 @@ export default function StatsColumn({
   committedBnpl,
   billsPaidCount,
   billsCashCount,
+  ccBillsCount,
   variableSpent,
+  ccCharges,
   remaining,
   saved,
   dayOfMonth,
@@ -105,10 +109,11 @@ export default function StatsColumn({
   const pct = (n: number) => income > 0 ? (n / income) * 100 : 0
 
   const billsSub = billsCashCount > 0
-    ? `${billsPaidCount}/${billsCashCount} bills paid${committedBnpl > 0 ? ` · RM ${formatRM(committedBnpl, 0)} BNPL` : ''}`
+    ? `${billsPaidCount}/${billsCashCount} bills paid${ccBillsCount > 0 ? ` · ${ccBillsCount} CC` : ''}${committedBnpl > 0 ? ` · RM ${formatRM(committedBnpl, 0)} BNPL` : ''}`
     : committedBnpl > 0 ? `BNPL RM ${formatRM(committedBnpl, 0)}` : 'no commitments set'
 
-  const varSub = `ad-hoc · ${daysIn - dayOfMonth} days left`
+  const varSub = `cash · ${daysIn - dayOfMonth} days left`
+  const ccSub = `deferred · settles at statement`
 
   const bufferPct = pct(remaining)
   const bufferSub = bufferPct >= 20
@@ -138,6 +143,16 @@ export default function StatsColumn({
         sub={varSub}
         hidden={hidden}
       />
+      {ccCharges > 0 && (
+        <Bucket
+          label="CC CHARGES"
+          amount={ccCharges}
+          pct={pct(ccCharges)}
+          barColor="#a78bfa"
+          sub={ccSub}
+          hidden={hidden}
+        />
+      )}
       <Bucket
         label="BUFFER NOW"
         amount={remaining}

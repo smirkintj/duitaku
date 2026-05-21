@@ -23,9 +23,12 @@ export function getPayCycle(baseMonth: string, payDay: number): PayCycle {
   const startDay = Math.min(payDay, daysInStart)
   const startDate = `${y}-${pad(m)}-${pad(startDay)}`
 
-  // Cycle ends on payDay-1 of the next month (or last day if payDay=1)
-  let ey = y, em = m + 1
-  if (em > 12) { em = 1; ey++ }
+  // Cycle ends on payDay-1 of the next month (or last day of current month if payDay=1)
+  let ey = y, em = m
+  if (payDay !== 1) {
+    em = m + 1
+    if (em > 12) { em = 1; ey++ }
+  }
   const daysInEnd = new Date(ey, em, 0).getDate()
   const endDay = payDay === 1 ? daysInEnd : Math.min(payDay - 1, daysInEnd)
   const endDate = `${ey}-${pad(em)}-${pad(endDay)}`
