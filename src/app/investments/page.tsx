@@ -429,14 +429,25 @@ export default function InvestmentsPage() {
           {loading ? (
             <div style={{ padding: '40px 0', textAlign: 'center', ...S.label }}>LOADING…</div>
           ) : investments.length === 0 ? (
-            <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '48px 16px', textAlign: 'center' }}>
-              <div style={{ ...S.label, marginBottom: 10 }}>NO INVESTMENTS YET</div>
-              <button
-                onClick={() => setShowAdd(true)}
-                style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '8px 16px', color: '#7a7a78', cursor: 'pointer', fontSize: 12.5, ...S.sans }}
-              >
-                Add your first investment
-              </button>
+            <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 16, padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ maxWidth: 380, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: '#181818', border: '1px solid #222', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, color: '#3a3a3a' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+                    <polyline points="16 7 22 7 22 13"/>
+                  </svg>
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: '#d0d0cf', ...S.sans, marginBottom: 8 }}>No investments tracked</div>
+                <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, lineHeight: 1.6, marginBottom: 24 }}>
+                  Add your EPF, ASB, unit trusts, or crypto holdings. The AI Coach will factor your portfolio into its analysis and show your overall net worth picture.
+                </div>
+                <button
+                  onClick={() => setShowAdd(true)}
+                  style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '10px 20px', fontSize: 13, fontWeight: 700, ...S.sans, cursor: 'pointer' }}
+                >
+                  + Add investment
+                </button>
+              </div>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>

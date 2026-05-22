@@ -21,25 +21,52 @@ interface NavItem {
   disabled?: boolean
 }
 
-const NAV_MAIN: NavItem[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { key: 'add', label: 'Add', icon: 'add' },
-  { key: 'transactions', label: 'Transactions', icon: 'tx' },
-  { key: 'bills', label: 'Bills', icon: 'bills' },
-  { key: 'cashflow', label: 'Cash Flow', icon: 'calendar' },
-  { key: 'trends', label: 'Trends', icon: 'trends' },
-  { key: 'import', label: 'Import', icon: 'import' },
-  { key: 'ai', label: 'AI Coach', icon: 'ai', pill: 'AI' },
-]
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
 
-const NAV_SECONDARY: NavItem[] = [
-  { key: 'savings', label: 'Savings', icon: 'savings' },
-  { key: 'investments', label: 'Investments', icon: 'invest' },
-  { key: 'loans', label: 'Loans', icon: 'loans' },
-  { key: 'merchants', label: 'Merchants', icon: 'merchant' },
-  { key: 'categories', label: 'Categories', icon: 'cats' },
-  { key: 'accounts', label: 'Accounts', icon: 'accounts' },
-  { key: 'settings', label: 'Settings', icon: 'settings' },
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Daily',
+    items: [
+      { key: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+      { key: 'add', label: 'Add', icon: 'add' },
+      { key: 'transactions', label: 'Transactions', icon: 'tx' },
+      { key: 'import', label: 'Import', icon: 'import' },
+    ],
+  },
+  {
+    label: 'Commitments',
+    items: [
+      { key: 'bills', label: 'Bills & BNPL', icon: 'bills' },
+      { key: 'cashflow', label: 'Cash Flow', icon: 'calendar' },
+      { key: 'loans', label: 'Loans', icon: 'loans' },
+    ],
+  },
+  {
+    label: 'Wealth',
+    items: [
+      { key: 'savings', label: 'Savings', icon: 'savings' },
+      { key: 'investments', label: 'Investments', icon: 'invest' },
+    ],
+  },
+  {
+    label: 'Analyse',
+    items: [
+      { key: 'trends', label: 'Trends', icon: 'trends' },
+      { key: 'categories', label: 'Categories', icon: 'cats' },
+      { key: 'merchants', label: 'Merchants', icon: 'merchant' },
+      { key: 'ai', label: 'AI Coach', icon: 'ai', pill: 'AI' },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { key: 'accounts', label: 'Accounts', icon: 'accounts' },
+      { key: 'settings', label: 'Settings', icon: 'settings' },
+    ],
+  },
 ]
 
 function NavButton({
@@ -67,7 +94,7 @@ function NavButton({
         alignItems: 'center',
         gap: 10,
         width: '100%',
-        padding: expanded ? '9px 14px' : '9px 0',
+        padding: expanded ? '8px 14px' : '8px 0',
         justifyContent: expanded ? 'flex-start' : 'center',
         borderRadius: 8,
         border: 'none',
@@ -93,7 +120,7 @@ function NavButton({
             top: '50%',
             transform: 'translateY(-50%)',
             width: 3,
-            height: 18,
+            height: 16,
             borderRadius: 2,
             background: '#a3e635',
           }}
@@ -106,33 +133,11 @@ function NavButton({
             {item.label}
           </span>
           {disabled ? (
-            <span
-              style={{
-                marginLeft: 'auto',
-                fontSize: 9,
-                fontFamily: '"JetBrains Mono", monospace',
-                color: '#3a3a38',
-                border: '1px solid #2a2a2a',
-                borderRadius: 4,
-                padding: '1px 5px',
-                letterSpacing: '0.06em',
-              }}
-            >
+            <span style={{ marginLeft: 'auto', fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: '#3a3a38', border: '1px solid #2a2a2a', borderRadius: 4, padding: '1px 5px', letterSpacing: '0.06em' }}>
               SOON
             </span>
           ) : item.pill ? (
-            <span
-              style={{
-                marginLeft: 'auto',
-                fontSize: 9,
-                fontFamily: '"JetBrains Mono", monospace',
-                color: '#a3e635',
-                border: '1px solid rgba(163,230,53,0.4)',
-                borderRadius: 4,
-                padding: '1px 5px',
-                letterSpacing: '0.06em',
-              }}
-            >
+            <span style={{ marginLeft: 'auto', fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: '#a3e635', border: '1px solid rgba(163,230,53,0.4)', borderRadius: 4, padding: '1px 5px', letterSpacing: '0.06em' }}>
               {item.pill}
             </span>
           ) : null}
@@ -189,48 +194,39 @@ export default function Sidebar({ active, setActive, expanded, setExpanded, user
           d
         </div>
         {expanded && (
-          <span
-            style={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: '#f5f5f4',
-              fontFamily: '"Geist", -apple-system, sans-serif',
-              letterSpacing: '-0.02em',
-            }}
-          >
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif', letterSpacing: '-0.02em' }}>
             duitaku<span style={{ color: '#a3e635' }}>.</span>
           </span>
         )}
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto', overflowX: 'hidden' }}>
-        {NAV_MAIN.map((item) => (
-          <NavButton
-            key={item.key}
-            item={item}
-            active={active === item.key}
-            expanded={expanded}
-            onClick={() => setActive(item.key)}
-          />
-        ))}
-
-        <div style={{ height: 1, background: '#141414', margin: '8px 0' }} />
-
-        {NAV_SECONDARY.map((item) => (
-          <NavButton
-            key={item.key}
-            item={item}
-            active={active === item.key}
-            expanded={expanded}
-            onClick={() => setActive(item.key)}
-          />
+      <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={group.label}>
+            {gi > 0 && <div style={{ height: 1, background: '#141414', margin: '6px 0' }} />}
+            {expanded && (
+              <div style={{ padding: '4px 14px 3px', fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: '#3a3a3a', letterSpacing: '0.1em' }}>
+                {group.label.toUpperCase()}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {group.items.map((item) => (
+                <NavButton
+                  key={item.key}
+                  item={item}
+                  active={active === item.key}
+                  expanded={expanded}
+                  onClick={() => setActive(item.key)}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
       {/* Bottom */}
       <div style={{ padding: '10px 8px 14px', display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid #141414', flexShrink: 0 }}>
-        {/* Collapse toggle */}
         <button
           onClick={() => setExpanded(!expanded)}
           style={{
@@ -249,14 +245,7 @@ export default function Sidebar({ active, setActive, expanded, setExpanded, user
           }}
         >
           {expanded && (
-            <span
-              style={{
-                fontSize: 9,
-                fontFamily: '"JetBrains Mono", monospace',
-                letterSpacing: '0.1em',
-                color: '#5b5b59',
-              }}
-            >
+            <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.1em', color: '#5b5b59' }}>
               COLLAPSE
             </span>
           )}

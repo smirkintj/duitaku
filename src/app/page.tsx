@@ -1,7 +1,7 @@
 import React from 'react'
 import { db } from '@/db'
 import { financeTransactions, financeCategories, financeSalary, financeBills, financeBnpl, financeBillPayments, userSettings, financeAccounts, financeInvestments, financeLoans } from '@/db/schema'
-import { and, gte, lte, desc, eq } from 'drizzle-orm'
+import { and, gte, lte, desc, eq, count } from 'drizzle-orm'
 import SidebarClient from '@/components/finance/SidebarClient'
 import HeroRemaining from '@/components/finance/HeroRemaining'
 import StatsColumn from '@/components/finance/StatsColumn'
@@ -68,7 +68,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const dayOfMonth = isCurrentCycle ? getDayInCycle(now, startDate, daysIn) : daysIn
 
   // Fetch in parallel
-  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth, ccAccountRows, investmentRows, loanRows] = await Promise.all([
+  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth, ccAccountRows, investmentRows, loanRows, txCountRows] = await Promise.all([
     db
       .select()
       .from(financeSalary)
@@ -96,9 +96,13 @@ export default async function HomePage({ searchParams }: PageProps) {
     db.select({ id: financeAccounts.id }).from(financeAccounts).where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.type, 'credit'))),
     db.select({ id: financeInvestments.id }).from(financeInvestments).where(eq(financeInvestments.userId, userId)).limit(1),
     db.select({ id: financeLoans.id }).from(financeLoans).where(and(eq(financeLoans.userId, userId), eq(financeLoans.isActive, true))).limit(1),
+    db.select({ total: count() }).from(financeTransactions).where(eq(financeTransactions.userId, userId)),
   ])
 
   const salaryDefault = salaryRows[0]?.amount ?? 0
+  const totalTxCount = txCountRows[0]?.total ?? 0
+  // isNewUser: salary was set (we're past the setup card) but no transactions yet — truly a new user
+  const isNewUser = !!salaryRows[0] && totalTxCount === 0
 
   // If no salary ever set, show first-time setup
   if (!salaryRows[0]) {
@@ -376,6 +380,7 @@ export default async function HomePage({ searchParams }: PageProps) {
           salaryDefault={salaryDefault}
           projectedRemaining={projectedRemaining}
           daysLeft={daysIn - dayOfMonth}
+          isNewUser={isNewUser}
         />
         <main
           style={{

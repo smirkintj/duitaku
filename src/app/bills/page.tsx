@@ -367,11 +367,26 @@ export default function BillsPage() {
             {loading ? (
               <div style={{ padding: '32px 16px', textAlign: 'center', ...S.label }}>LOADING…</div>
             ) : bills.length === 0 ? (
-              <div style={{ padding: '32px 16px', textAlign: 'center' }}>
-                <div style={{ ...S.label, marginBottom: 8 }}>NO BILLS YET</div>
-                <button onClick={() => setShowAddBill(true)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '6px 14px', color: '#7a7a78', cursor: 'pointer', fontSize: 12, ...S.sans }}>
-                  Add your first bill
-                </button>
+              <div style={{ padding: '48px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ maxWidth: 380, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 12, background: '#181818', border: '1px solid #222', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, color: '#3a3a3a' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="5" width="18" height="14" rx="2"/>
+                      <path d="M3 10h18"/>
+                      <path d="M8 15h.01M12 15h4"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#d0d0cf', ...S.sans, marginBottom: 8 }}>No bills set up yet</div>
+                  <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, lineHeight: 1.6, marginBottom: 24 }}>
+                    Bills tracks your fixed monthly payments — rent, subscriptions, utilities. Once added, they appear on your Cash Flow calendar and the AI Coach factors them into your budget.
+                  </div>
+                  <button
+                    onClick={() => setShowAddBill(true)}
+                    style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '10px 20px', fontSize: 13, fontWeight: 700, ...S.sans, cursor: 'pointer' }}
+                  >
+                    + Add your first bill
+                  </button>
+                </div>
               </div>
             ) : (
               <>
@@ -428,11 +443,26 @@ export default function BillsPage() {
             {bnplLoading ? (
               <div style={{ padding: '32px 16px', textAlign: 'center', ...S.label }}>LOADING…</div>
             ) : bnpl.length === 0 ? (
-              <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '32px 16px', textAlign: 'center' }}>
-                <div style={{ ...S.label, marginBottom: 8 }}>NO BNPL PLANS</div>
-                <button onClick={() => setShowAddBnpl(true)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '6px 14px', color: '#7a7a78', cursor: 'pointer', fontSize: 12, ...S.sans }}>
-                  Add a BNPL plan
-                </button>
+              <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 16, padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ maxWidth: 380, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 12, background: '#181818', border: '1px solid #222', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, color: '#3a3a3a' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                      <line x1="3" y1="6" x2="21" y2="6"/>
+                      <path d="M16 10a4 4 0 0 1-8 0"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#d0d0cf', ...S.sans, marginBottom: 8 }}>No BNPL plans</div>
+                  <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, lineHeight: 1.6, marginBottom: 24 }}>
+                    Track buy-now-pay-later installments from Shopee, Grab, or any provider. We&apos;ll show you the total monthly commitment and flag when plans overlap.
+                  </div>
+                  <button
+                    onClick={() => setShowAddBnpl(true)}
+                    style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '10px 20px', fontSize: 13, fontWeight: 700, ...S.sans, cursor: 'pointer' }}
+                  >
+                    + Add BNPL plan
+                  </button>
+                </div>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>

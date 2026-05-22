@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import SidebarClient from '@/components/finance/SidebarClient'
 import AddTransactionModal from '@/components/finance/AddTransactionModal'
 import EditTransactionModal from '@/components/finance/EditTransactionModal'
@@ -165,6 +166,39 @@ function TransactionsContent() {
         </div>
 
         {/* List */}
+        {!loading && txs.length === 0 ? (
+          <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 16, padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ maxWidth: 380, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: '#181818', border: '1px solid #222', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, color: '#3a3a3a' }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
+                </svg>
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#d0d0cf', fontFamily: '"Geist", -apple-system, sans-serif', marginBottom: 8 }}>No transactions yet</div>
+              <div style={{ fontSize: 13, color: '#5b5b59', fontFamily: '"Geist", -apple-system, sans-serif', lineHeight: 1.6, marginBottom: 24 }}>
+                Start by importing a bank statement PDF or add transactions manually. Transactions power your spending trends, category budgets and AI insights.
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <Link
+                  href="/import"
+                  style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '10px 20px', fontSize: 13, fontWeight: 700, fontFamily: '"Geist", -apple-system, sans-serif', cursor: 'pointer', textDecoration: 'none', display: 'inline-block' }}
+                >
+                  Import PDF
+                </Link>
+                <button
+                  onClick={() => setShowModal(true)}
+                  style={{ background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 9, padding: '10px 20px', fontSize: 13, fontWeight: 600, fontFamily: '"Geist", -apple-system, sans-serif', color: '#7a7a78', cursor: 'pointer' }}
+                >
+                  + Add manually
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '10px 20px', borderBottom: '1px solid #1a1a1a' }}>
             {['DATE', 'MERCHANT', 'CATEGORY', 'AMOUNT', '', ''].map((h, i) => (
