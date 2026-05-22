@@ -164,8 +164,20 @@ export default function ImportPage() {
             </form>
           </div>
 
+          {/* Save success overlay */}
+          {result && (
+            <div style={{ background: 'rgba(163,230,53,0.06)', border: '1px solid rgba(163,230,53,0.25)', borderRadius: 14, padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#a3e635', ...S.sans }}>
+                {result.imported} transaction{result.imported !== 1 ? 's' : ''} saved
+              </div>
+              <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans }}>
+                {result.skipped > 0 ? `${result.skipped} duplicate${result.skipped !== 1 ? 's' : ''} skipped · ` : ''}Redirecting to dashboard…
+              </div>
+            </div>
+          )}
+
           {/* Review */}
-          {rows.length > 0 && (
+          {!result && rows.length > 0 && (
             <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
               {/* Summary bar */}
               <div style={{ padding: '16px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
@@ -185,15 +197,14 @@ export default function ImportPage() {
                   <button onClick={() => setRows(prev => prev.map(r => ({ ...r, excluded: false })))} style={{ fontSize: 11, ...S.mono, color: '#5b5b59', background: 'transparent', border: '1px solid #222', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}>select all</button>
                   <button onClick={() => setRows(prev => prev.map(r => ({ ...r, excluded: true })))} style={{ fontSize: 11, ...S.mono, color: '#5b5b59', background: 'transparent', border: '1px solid #222', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}>deselect all</button>
                 </div>
-                {result ? (
-                  <div style={{ fontSize: 13, color: '#a3e635', ...S.sans, fontWeight: 500 }}>
-                    Saved {result.imported}, skipped {result.skipped} duplicates. Redirecting…
-                  </div>
-                ) : (
-                  <button onClick={handleConfirm} disabled={confirming || included.length === 0} style={{ background: confirming || included.length === 0 ? '#1a1a1a' : '#a3e635', color: confirming || included.length === 0 ? '#3a3a3a' : '#0d0d0d', border: 'none', borderRadius: 8, padding: '9px 22px', fontSize: 13, fontWeight: 700, ...S.sans, cursor: confirming || included.length === 0 ? 'not-allowed' : 'pointer' }}>
-                    {confirming ? 'Saving…' : `Save ${included.length} transactions`}
-                  </button>
-                )}
+                <button onClick={handleConfirm} disabled={confirming || included.length === 0} style={{ background: confirming || included.length === 0 ? '#1a1a1a' : '#a3e635', color: confirming || included.length === 0 ? '#3a3a3a' : '#0d0d0d', border: 'none', borderRadius: 8, padding: '9px 22px', fontSize: 13, fontWeight: 700, ...S.sans, cursor: confirming || included.length === 0 ? 'not-allowed' : 'pointer' }}>
+                  {confirming ? 'Saving…' : `Save ${included.length} transactions`}
+                </button>
+              </div>
+              <div style={{ padding: '8px 24px', borderBottom: '1px solid #0f0f0f', background: '#0a0a0a' }}>
+                <span style={{ fontSize: 11, ...S.mono, color: '#3a3a3a' }}>
+                  Nothing is saved until you click the Save button above
+                </span>
               </div>
 
               {/* Column headers */}

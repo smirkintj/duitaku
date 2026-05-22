@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import SidebarClient from '@/components/finance/SidebarClient'
 import SalaryForm, { SalaryFormValues, SalaryFormDefaults } from '@/components/finance/SalaryForm'
+import AccountsManager from '@/components/finance/AccountsManager'
 import { formatRM } from '@/lib/finance-utils'
 
 const S = {
@@ -234,6 +235,8 @@ export default function SettingsPage() {
               Salary history is preserved — each update adds a new entry. The most recent entry on or before the current month is used for budget calculations.
             </p>
           </div>
+
+          <AccountsManager />
 
           {/* Pay cycle section */}
           <div style={{ marginTop: 28, background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '24px 28px' }}>
