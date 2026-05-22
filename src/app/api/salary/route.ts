@@ -1,11 +1,16 @@
 import { db } from '@/db'
 import { financeSalary } from '@/db/schema'
-import { desc } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const [latest] = await db
     .select()
     .from(financeSalary)
+    .where(eq(financeSalary.userId, userId))
     .orderBy(desc(financeSalary.effectiveFrom))
     .limit(1)
 
@@ -13,6 +18,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const body = await request.json() as {
     amount: number       // net take-home
     grossAmount?: number
@@ -29,6 +37,7 @@ export async function POST(request: Request) {
   const [created] = await db
     .insert(financeSalary)
     .values({
+      userId,
       amount: body.amount,
       grossAmount: body.grossAmount ?? null,
       epfEmployee: body.epfEmployee ?? 0,

@@ -213,8 +213,21 @@ export default function AICoachCard({ month }: AICoachCardProps) {
 
       {/* Generating state */}
       {generating && (
-        <div style={{ textAlign: 'center', padding: '40px 0', position: 'relative', zIndex: 1, color: '#7a7a78', fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>
-          Analyzing your financial data…
+        <div style={{ padding: '32px 0', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid #a3e63540', borderTopColor: '#a3e635', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+            <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: '#a3e635', letterSpacing: '0.06em' }}>ANALYZING YOUR FINANCES…</span>
+          </div>
+          <div style={{ width: 240, height: 2, background: '#1a1a1a', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ height: '100%', background: 'linear-gradient(90deg, #a3e635 0%, #a3e63560 50%, #a3e635 100%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s ease infinite', borderRadius: 2 }} />
+          </div>
+          <div style={{ fontFamily: '"Geist", -apple-system, sans-serif', fontSize: 12, color: '#5b5b59', textAlign: 'center', maxWidth: 280 }}>
+            Reading spending patterns, bills, savings goals and CC data for {month}
+          </div>
+          <style>{`
+            @keyframes spin { to { transform: rotate(360deg); } }
+            @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+          `}</style>
         </div>
       )}
 

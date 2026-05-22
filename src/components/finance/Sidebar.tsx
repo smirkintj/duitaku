@@ -8,6 +8,9 @@ interface SidebarProps {
   setActive: (s: string) => void
   expanded: boolean
   setExpanded: (v: boolean) => void
+  userName?: string
+  userEmail?: string
+  onLogout?: () => void
 }
 
 interface NavItem {
@@ -138,7 +141,7 @@ function NavButton({
   )
 }
 
-export default function Sidebar({ active, setActive, expanded, setExpanded }: SidebarProps) {
+export default function Sidebar({ active, setActive, expanded, setExpanded, userName, userEmail, onLogout }: SidebarProps) {
   return (
     <div
       style={{
@@ -260,43 +263,32 @@ export default function Sidebar({ active, setActive, expanded, setExpanded }: Si
         </button>
 
         {/* Profile chip */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: expanded ? '6px 10px' : '6px 0',
-            justifyContent: expanded ? 'flex-start' : 'center',
-            borderRadius: 8,
-          }}
-        >
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #a3e635 0%, #4ade80 100%)',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 13,
-              fontWeight: 700,
-              color: '#0d0d0d',
-              fontFamily: '"Geist", -apple-system, sans-serif',
-            }}
-          >
-            P
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: expanded ? '6px 10px' : '6px 0', justifyContent: expanded ? 'flex-start' : 'center', borderRadius: 8 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg, #a3e635 0%, #4ade80 100%)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#0d0d0d', fontFamily: '"Geist", -apple-system, sans-serif' }}>
+            {(userName ?? userEmail ?? 'U')[0].toUpperCase()}
           </div>
           {expanded && (
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#d0d0cf', fontFamily: '"Geist", -apple-system, sans-serif' }}>
-                Putra
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#d0d0cf', fontFamily: '"Geist", -apple-system, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {userName ?? userEmail ?? 'My Account'}
               </span>
               <span style={{ fontSize: 9, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em' }}>
-                free plan
+                {userEmail ?? ''}
               </span>
             </div>
+          )}
+          {expanded && onLogout && (
+            <button
+              onClick={onLogout}
+              title="Sign out"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', padding: 4, display: 'flex', alignItems: 'center', flexShrink: 0 }}
+            >
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </button>
           )}
         </div>
       </div>

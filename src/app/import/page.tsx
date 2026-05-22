@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import SidebarClient from '@/components/finance/SidebarClient'
 import { Icon } from '@/components/finance/icons'
 
@@ -39,6 +40,7 @@ export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null)
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [importStep, setImportStep] = useState<string>('')
   const [error, setError] = useState('')
   const [needsPassword, setNeedsPassword] = useState(false)
   const [rows, setRows] = useState<ReviewRow[]>([])
@@ -50,6 +52,7 @@ export default function ImportPage() {
     e.preventDefault()
     if (!file) return
     setLoading(true)
+    setImportStep('Reading PDF…')
     setError('')
     setRows([])
     try {
@@ -57,6 +60,7 @@ export default function ImportPage() {
       formData.append('file', file)
       if (password) formData.append('password', password)
 
+      setImportStep('Extracting transactions with AI…')
       const res = await fetch('/api/import/pdf', { method: 'POST', body: formData })
       const data = await res.json() as { transactions?: ParsedTx[]; error?: string; needsPassword?: boolean }
 
@@ -70,6 +74,7 @@ export default function ImportPage() {
       const initialRows: ReviewRow[] = parsed.map((tx, i) => ({ ...tx, _id: i, excluded: false, editing: false, duplicate: false }))
       setRows(initialRows)
 
+      setImportStep('Checking for duplicates…')
       const [catsRes, dupRes] = await Promise.all([
         fetch('/api/categories'),
         fetch('/api/import/check-duplicates', {
@@ -89,6 +94,7 @@ export default function ImportPage() {
       setError(err instanceof Error ? err.message : 'Import failed')
     } finally {
       setLoading(false)
+      setImportStep('')
     }
   }
 
@@ -158,21 +164,40 @@ export default function ImportPage() {
 
               {error && <div style={{ fontSize: 13, color: '#ef4444', ...S.sans }}>{error}</div>}
 
-              <button type="submit" disabled={!file || loading} style={{ background: !file || loading ? '#1a1a1a' : '#a3e635', color: !file || loading ? '#3a3a3a' : '#0d0d0d', border: 'none', borderRadius: 9, padding: '11px 0', fontSize: 14, fontWeight: 700, ...S.sans, cursor: !file || loading ? 'not-allowed' : 'pointer' }}>
-                {loading ? 'Parsing PDF…' : 'Parse PDF'}
+              {loading && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid #a3e63540', borderTopColor: '#a3e635', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: '#a3e635', ...S.sans }}>{importStep}</span>
+                  </div>
+                  <div style={{ height: 2, background: '#1a1a1a', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', background: 'linear-gradient(90deg, #a3e635 0%, #a3e63560 50%, #a3e635 100%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s ease infinite', borderRadius: 2 }} />
+                  </div>
+                </div>
+              )}
+              <style>{`
+                @keyframes spin { to { transform: rotate(360deg); } }
+                @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+              `}</style>
+              <button type="submit" disabled={!file || loading} style={{ background: !file || loading ? '#1a1a1a' : '#a3e635', color: !file || loading ? '#3a3a3a' : '#0d0d0d', border: 'none', borderRadius: 9, padding: '11px 0', fontSize: 14, fontWeight: 700, ...S.sans, cursor: !file || loading ? 'not-allowed' : 'pointer', display: loading ? 'none' : undefined }}>
+                Parse PDF
               </button>
             </form>
           </div>
 
           {/* Save success overlay */}
           {result && (
-            <div style={{ background: 'rgba(163,230,53,0.06)', border: '1px solid rgba(163,230,53,0.25)', borderRadius: 14, padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ background: 'rgba(163,230,53,0.06)', border: '1px solid rgba(163,230,53,0.25)', borderRadius: 14, padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: '#a3e635', ...S.sans }}>
                 {result.imported} transaction{result.imported !== 1 ? 's' : ''} saved
               </div>
               <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans }}>
-                {result.skipped > 0 ? `${result.skipped} duplicate${result.skipped !== 1 ? 's' : ''} skipped · ` : ''}Redirecting to dashboard…
+                {result.skipped > 0 ? `${result.skipped} duplicate${result.skipped !== 1 ? 's' : ''} skipped · ` : ''}
+                They&apos;re now in your transactions list.
               </div>
+              <Link href="/transactions" style={{ display: 'inline-block', marginTop: 4, fontSize: 13, fontWeight: 600, color: '#a3e635', textDecoration: 'none', border: '1px solid rgba(163,230,53,0.3)', borderRadius: 8, padding: '8px 16px', width: 'fit-content', background: 'rgba(163,230,53,0.06)' }}>
+                View transactions →
+              </Link>
             </div>
           )}
 

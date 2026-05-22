@@ -1,6 +1,7 @@
 import { db } from '@/db'
 import { financeTransactions } from '@/db/schema'
 import { and, eq, gte } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 interface Suggestion {
   merchant: string
@@ -12,7 +13,10 @@ interface Suggestion {
 
 // Look back 90 days and find merchants that appear 2+ times with same amount.
 // Only surfaces expenses not already marked recurring.
-export async function GET() {
+export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - 90)
   const since = cutoff.toISOString().slice(0, 10)
@@ -27,6 +31,7 @@ export async function GET() {
     })
     .from(financeTransactions)
     .where(and(
+      eq(financeTransactions.userId, userId),
       gte(financeTransactions.date, since),
       eq(financeTransactions.type, 'expense'),
       eq(financeTransactions.isRecurring, false),
@@ -69,8 +74,13 @@ export async function GET() {
 
 // PATCH: mark all transactions in a group as recurring
 export async function PATCH(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { transactionIds, isRecurring } = await request.json() as { transactionIds: string[]; isRecurring: boolean }
   const { inArray } = await import('drizzle-orm')
-  await db.update(financeTransactions).set({ isRecurring }).where(inArray(financeTransactions.id, transactionIds))
+  await db.update(financeTransactions).set({ isRecurring }).where(
+    and(inArray(financeTransactions.id, transactionIds), eq(financeTransactions.userId, userId))
+  )
   return Response.json({ ok: true })
 }

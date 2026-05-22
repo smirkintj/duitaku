@@ -1,11 +1,18 @@
 import { db } from '@/db'
 import { financeAccounts, financeCcStatements } from '@/db/schema'
-import { asc, inArray } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
-export async function GET() {
-  const accounts = await db.select().from(financeAccounts).orderBy(asc(financeAccounts.name))
+export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
+  const accounts = await db.select().from(financeAccounts)
+    .where(eq(financeAccounts.userId, userId))
+    .orderBy(asc(financeAccounts.name))
 
   const ccIds = accounts.filter((a) => a.type === 'credit').map((a) => a.id)
+  // financeCcStatements doesn't have userId — derive security through accountId ownership
   const statements = ccIds.length > 0
     ? await db.select().from(financeCcStatements).where(inArray(financeCcStatements.accountId, ccIds))
     : []
@@ -22,6 +29,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const body = await request.json() as {
     name: string
     type?: string
@@ -35,6 +45,7 @@ export async function POST(request: Request) {
   }
 
   const [created] = await db.insert(financeAccounts).values({
+    userId,
     name: body.name,
     type: body.type ?? 'bank',
     currency: body.currency ?? 'MYR',

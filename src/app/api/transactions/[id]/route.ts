@@ -1,11 +1,15 @@
 import { db } from '@/db'
 import { financeTransactions } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { id } = await params
   const body = await request.json() as {
     amount?: number
@@ -28,21 +32,24 @@ export async function PATCH(
       ...(body.categoryId !== undefined && { categoryId: body.categoryId }),
       ...(body.isRecurring !== undefined && { isRecurring: body.isRecurring }),
     })
-    .where(eq(financeTransactions.id, id))
+    .where(and(eq(financeTransactions.id, id), eq(financeTransactions.userId, userId)))
     .returning()
 
   return Response.json(updated)
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { id } = await params
 
   await db
     .delete(financeTransactions)
-    .where(eq(financeTransactions.id, id))
+    .where(and(eq(financeTransactions.id, id), eq(financeTransactions.userId, userId)))
 
   return Response.json({ ok: true })
 }

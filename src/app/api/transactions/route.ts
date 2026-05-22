@@ -1,8 +1,12 @@
 import { db } from '@/db'
 import { financeTransactions } from '@/db/schema'
-import { and, gte, lte, desc } from 'drizzle-orm'
+import { and, gte, lte, desc, eq } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { searchParams } = new URL(request.url)
   const m = searchParams.get('m') // YYYY-MM
 
@@ -12,12 +16,17 @@ export async function GET(request: Request) {
     rows = await db
       .select()
       .from(financeTransactions)
-      .where(and(gte(financeTransactions.date, `${y}-${mo}-01`), lte(financeTransactions.date, `${y}-${mo}-31`)))
+      .where(and(
+        eq(financeTransactions.userId, userId),
+        gte(financeTransactions.date, `${y}-${mo}-01`),
+        lte(financeTransactions.date, `${y}-${mo}-31`),
+      ))
       .orderBy(desc(financeTransactions.date))
   } else {
     rows = await db
       .select()
       .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId))
       .orderBy(desc(financeTransactions.date))
       .limit(200)
   }
@@ -26,6 +35,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const body = await request.json() as {
     accountId?: string
     categoryId?: string
@@ -41,6 +53,7 @@ export async function POST(request: Request) {
   const [created] = await db
     .insert(financeTransactions)
     .values({
+      userId,
       accountId: body.accountId ?? null,
       categoryId: body.categoryId ?? null,
       amount: body.amount,

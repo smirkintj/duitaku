@@ -1,8 +1,17 @@
 import { pgTable, text, timestamp, integer, real, boolean, uuid } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
+export const users = pgTable('users', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  email: text('email').notNull().unique(),
+  name: text('name'),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
 export const financeAccounts = pgTable('finance_accounts', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   type: text('type').notNull().default('bank'), // cash | bank | credit
   currency: text('currency').notNull().default('MYR'),
@@ -30,6 +39,7 @@ export const financeCcStatements = pgTable('finance_cc_statements', {
 
 export const financeCategories = pgTable('finance_categories', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   icon: text('icon').notNull().default('bag'),
   color: text('color').default('#a3e635'),
@@ -40,6 +50,7 @@ export const financeCategories = pgTable('finance_categories', {
 
 export const financeTransactions = pgTable('finance_transactions', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   accountId: uuid('account_id').references(() => financeAccounts.id, { onDelete: 'cascade' }),
   categoryId: uuid('category_id').references(() => financeCategories.id, { onDelete: 'set null' }),
   amount: real('amount').notNull(),
@@ -55,6 +66,7 @@ export const financeTransactions = pgTable('finance_transactions', {
 
 export const financeSalary = pgTable('finance_salary', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   amount: real('amount').notNull(),        // net take-home (used everywhere as income base)
   grossAmount: real('gross_amount'),       // gross salary before deductions
   epfEmployee: real('epf_employee').default(0),
@@ -70,6 +82,7 @@ export const financeSalary = pgTable('finance_salary', {
 
 export const userSettings = pgTable('user_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).unique(),
   celestial: boolean('celestial').notNull().default(true),
   sidebarExpanded: boolean('sidebar_expanded').notNull().default(true),
   payDay: integer('pay_day').default(1),  // day of month salary arrives (1-31)
@@ -78,6 +91,7 @@ export const userSettings = pgTable('user_settings', {
 
 export const financeBills = pgTable('finance_bills', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   amount: real('amount').notNull(),
   dueDay: integer('due_day').notNull().default(1),
@@ -99,6 +113,7 @@ export const financeBillPayments = pgTable('finance_bill_payments', {
 
 export const financeBnpl = pgTable('finance_bnpl', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   accountId: uuid('account_id').references(() => financeAccounts.id, { onDelete: 'set null' }),
   merchant: text('merchant').notNull(),
   provider: text('provider').notNull().default('shopee'),
@@ -114,6 +129,7 @@ export const financeBnpl = pgTable('finance_bnpl', {
 
 export const financeSavingsGoals = pgTable('finance_savings_goals', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   targetAmount: real('target_amount'),
   currentAmount: real('current_amount').notNull().default(0),
@@ -124,6 +140,7 @@ export const financeSavingsGoals = pgTable('finance_savings_goals', {
 
 export const financeAiInsights = pgTable('finance_ai_insights', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   month: text('month').notNull(),   // YYYY-MM — one row per month
   data: text('data').notNull(),     // JSON string of CoachData
   generatedAt: timestamp('generated_at').defaultNow().notNull(),
@@ -131,6 +148,7 @@ export const financeAiInsights = pgTable('finance_ai_insights', {
 
 export const financeInvestments = pgTable('finance_investments', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   type: text('type').notNull(), // 'epf' | 'asb' | 'versa' | 'crypto' | 'unit_trust' | 'other'
   provider: text('provider'),
@@ -147,6 +165,7 @@ export const financeInvestments = pgTable('finance_investments', {
 
 export const financeLoans = pgTable('finance_loans', {
   id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   type: text('type').notNull().default('other'), // car | student | personal | mortgage | other
   lender: text('lender'),

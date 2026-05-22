@@ -16,6 +16,8 @@ import RecurringSuggestions from '@/components/finance/RecurringSuggestions'
 import SetupNudge, { type NudgeItem } from '@/components/finance/SetupNudge'
 import { computeRedFlags } from '@/lib/red-flags'
 import { getPayCycle, getCurrentBaseMonth, getDayInCycle, prevCycleMonth } from '@/lib/pay-cycle'
+import { getUserId } from '@/lib/get-user-id'
+import { redirect } from 'next/navigation'
 
 interface PageProps {
   searchParams: Promise<{ m?: string }>
@@ -38,13 +40,16 @@ export default async function HomePage({ searchParams }: PageProps) {
     return <DbSetupCard message="Set DATABASE_URL in your Vercel project environment variables, then redeploy." />
   }
 
+  const userId = await getUserId()
+  if (!userId) redirect('/login')
+
   const sp = await searchParams
   const mParam = sp.m
 
   const now = new Date()
 
   // Load pay day setting (default 1 = calendar month)
-  const settingsRows = await db.select({ payDay: userSettings.payDay }).from(userSettings).limit(1)
+  const settingsRows = await db.select({ payDay: userSettings.payDay }).from(userSettings).where(eq(userSettings.userId, userId)).limit(1)
   const payDay = settingsRows[0]?.payDay ?? 1
 
   // Determine which cycle (base month) to view
@@ -67,7 +72,7 @@ export default async function HomePage({ searchParams }: PageProps) {
     db
       .select()
       .from(financeSalary)
-      .where(lte(financeSalary.effectiveFrom, endDate))
+      .where(and(eq(financeSalary.userId, userId), lte(financeSalary.effectiveFrom, endDate)))
       .orderBy(desc(financeSalary.effectiveFrom))
       .limit(1),
     db
@@ -83,14 +88,14 @@ export default async function HomePage({ searchParams }: PageProps) {
         accountId: financeTransactions.accountId,
       })
       .from(financeTransactions)
-      .where(and(gte(financeTransactions.date, startDate), lte(financeTransactions.date, endDate))),
-    db.select().from(financeCategories),
-    db.select().from(financeBills).where(eq(financeBills.isActive, true)),
-    db.select().from(financeBnpl).where(eq(financeBnpl.isActive, true)),
+      .where(and(eq(financeTransactions.userId, userId), gte(financeTransactions.date, startDate), lte(financeTransactions.date, endDate))),
+    db.select().from(financeCategories).where(eq(financeCategories.userId, userId)),
+    db.select().from(financeBills).where(and(eq(financeBills.userId, userId), eq(financeBills.isActive, true))),
+    db.select().from(financeBnpl).where(and(eq(financeBnpl.userId, userId), eq(financeBnpl.isActive, true))),
     db.select().from(financeBillPayments).where(eq(financeBillPayments.month, baseMonth)),
-    db.select({ id: financeAccounts.id }).from(financeAccounts).where(eq(financeAccounts.type, 'credit')),
-    db.select({ id: financeInvestments.id }).from(financeInvestments).limit(1),
-    db.select({ id: financeLoans.id }).from(financeLoans).where(eq(financeLoans.isActive, true)).limit(1),
+    db.select({ id: financeAccounts.id }).from(financeAccounts).where(and(eq(financeAccounts.userId, userId), eq(financeAccounts.type, 'credit'))),
+    db.select({ id: financeInvestments.id }).from(financeInvestments).where(eq(financeInvestments.userId, userId)).limit(1),
+    db.select({ id: financeLoans.id }).from(financeLoans).where(and(eq(financeLoans.userId, userId), eq(financeLoans.isActive, true))).limit(1),
   ])
 
   const salaryDefault = salaryRows[0]?.amount ?? 0
@@ -186,6 +191,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       .from(financeTransactions)
       .where(
         and(
+          eq(financeTransactions.userId, userId),
           gte(financeTransactions.date, prior3Ranges[2].start),
           lte(financeTransactions.date, prior3Ranges[0].end),
         ),
@@ -199,6 +205,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       .from(financeTransactions)
       .where(
         and(
+          eq(financeTransactions.userId, userId),
           gte(financeTransactions.date, prevMonthRange.start),
           lte(financeTransactions.date, prevMonthRange.end),
         ),

@@ -1,8 +1,12 @@
 import { db } from '@/db'
 import { financeBnpl, financeTransactions } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { id } = await params
   const body = await request.json() as {
     payInstallment?: boolean
@@ -18,19 +22,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   if (body.payInstallment) {
-    const [bnpl] = await db.select().from(financeBnpl).where(eq(financeBnpl.id, id))
+    const [bnpl] = await db.select().from(financeBnpl).where(and(eq(financeBnpl.id, id), eq(financeBnpl.userId, userId)))
     if (!bnpl) return Response.json({ error: 'Not found' }, { status: 404 })
     const newPaid = bnpl.paidInstallments + 1
     const isNowDone = newPaid >= bnpl.totalInstallments
     const today = new Date().toISOString().slice(0, 10)
     await db.insert(financeTransactions).values({
+      userId,
       amount: bnpl.installmentAmount,
       date: today,
       type: 'expense',
       merchant: `${bnpl.merchant} (BNPL ${newPaid}/${bnpl.totalInstallments})`,
       isRecurring: true,
     })
-    const [updated] = await db.update(financeBnpl).set({ paidInstallments: newPaid, isActive: !isNowDone }).where(eq(financeBnpl.id, id)).returning()
+    const [updated] = await db.update(financeBnpl).set({ paidInstallments: newPaid, isActive: !isNowDone }).where(and(eq(financeBnpl.id, id), eq(financeBnpl.userId, userId))).returning()
     return Response.json(updated)
   }
 
@@ -44,12 +49,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.totalInstallments !== undefined) updates.totalInstallments = body.totalInstallments
   if (body.startMonth !== undefined) updates.startMonth = body.startMonth
   if ('notes' in body) updates.notes = body.notes
-  const [updated] = await db.update(financeBnpl).set(updates).where(eq(financeBnpl.id, id)).returning()
+  const [updated] = await db.update(financeBnpl).set(updates).where(and(eq(financeBnpl.id, id), eq(financeBnpl.userId, userId))).returning()
   return Response.json(updated)
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { id } = await params
-  await db.delete(financeBnpl).where(eq(financeBnpl.id, id))
+  await db.delete(financeBnpl).where(and(eq(financeBnpl.id, id), eq(financeBnpl.userId, userId)))
   return Response.json({ ok: true })
 }

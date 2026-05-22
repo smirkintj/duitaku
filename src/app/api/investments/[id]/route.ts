@@ -1,8 +1,12 @@
 import { db } from '@/db'
 import { financeInvestments } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { id } = await params
   const body = await request.json() as {
     name?: string
@@ -25,12 +29,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     ...(body.units !== undefined && { units: body.units }),
     ...(body.ticker !== undefined && { ticker: body.ticker }),
     ...(body.notes !== undefined && { notes: body.notes }),
-  }).where(eq(financeInvestments.id, id)).returning()
+  }).where(and(eq(financeInvestments.id, id), eq(financeInvestments.userId, userId))).returning()
   return Response.json(updated)
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { id } = await params
-  await db.delete(financeInvestments).where(eq(financeInvestments.id, id))
+  await db.delete(financeInvestments).where(and(eq(financeInvestments.id, id), eq(financeInvestments.userId, userId)))
   return Response.json({ ok: true })
 }

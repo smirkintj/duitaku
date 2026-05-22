@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import { formatRM } from '@/lib/finance-utils'
 import { CategoryIcon } from './icons'
 
@@ -132,19 +133,18 @@ export default function RecentTransactions({ transactions }: RecentTransactionsP
             Last {transactions.length} transactions
           </span>
         </div>
-        <button
+        <Link
+          href="/transactions"
           style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
             color: '#a3e635',
             fontSize: 12,
             fontFamily: '"Geist", -apple-system, sans-serif',
             fontWeight: 500,
+            textDecoration: 'none',
           }}
         >
           View all →
-        </button>
+        </Link>
       </div>
 
       {/* List */}
