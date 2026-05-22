@@ -1,13 +1,22 @@
 import { db } from '@/db'
 import { financeLoans } from '@/db/schema'
-import { eq, asc } from 'drizzle-orm'
+import { and, eq, asc } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
-export async function GET() {
-  const loans = await db.select().from(financeLoans).where(eq(financeLoans.isActive, true)).orderBy(asc(financeLoans.createdAt))
+export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
+  const loans = await db.select().from(financeLoans)
+    .where(and(eq(financeLoans.userId, userId), eq(financeLoans.isActive, true)))
+    .orderBy(asc(financeLoans.createdAt))
   return Response.json(loans)
 }
 
 export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const body = await request.json() as {
     name: string
     type?: string
@@ -22,6 +31,7 @@ export async function POST(request: Request) {
     notes?: string
   }
   const [created] = await db.insert(financeLoans).values({
+    userId,
     name: body.name,
     type: body.type ?? 'other',
     lender: body.lender ?? null,

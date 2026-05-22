@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeTransactions, financeCategories, financeSalary, financeBills, financeBillPayments, financeBnpl, financeSavingsGoals, financeAccounts, financeCcStatements, financeAiInsights } from '@/db/schema'
 import { and, gte, lte, desc, eq, inArray } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 interface CoachData {
   summary: string
@@ -10,11 +11,14 @@ interface CoachData {
 }
 
 export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { searchParams } = new URL(request.url)
   const month = searchParams.get('month')
   if (!month) return Response.json({ error: 'month required' }, { status: 400 })
 
-  const rows = await db.select().from(financeAiInsights).where(eq(financeAiInsights.month, month)).limit(1)
+  const rows = await db.select().from(financeAiInsights).where(and(eq(financeAiInsights.userId, userId), eq(financeAiInsights.month, month))).limit(1)
   if (rows.length === 0) return Response.json({ stored: null })
 
   return Response.json({
