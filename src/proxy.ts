@@ -8,7 +8,7 @@ const COOKIE = 'duitaku_session'
 
 const PUBLIC_PATHS = ['/login', '/register', '/api/auth/login', '/api/auth/register']
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
