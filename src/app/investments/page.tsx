@@ -27,12 +27,19 @@ const S = {
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  epf: '#f59e0b',
-  asb: '#10b981',
+  epf: '#fbbf24',
+  asb: '#34d399',
   versa: '#6366f1',
   crypto: '#f97316',
   unit_trust: '#8b5cf6',
   other: '#6b7280',
+  stocks_bursa: '#06b6d4',
+  stocks_us: '#3b82f6',
+  fixed_deposit: '#10b981',
+  gold: '#f59e0b',
+  bonds: '#8b5cf6',
+  tabung_haji: '#f97316',
+  property: '#ec4899',
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -42,6 +49,13 @@ const TYPE_LABELS: Record<string, string> = {
   crypto: 'CRYPTO',
   unit_trust: 'UNIT TRUST',
   other: 'OTHER',
+  stocks_bursa: 'BURSA STOCKS',
+  stocks_us: 'US STOCKS',
+  fixed_deposit: 'FIXED DEPOSIT',
+  gold: 'GOLD',
+  bonds: 'BONDS',
+  tabung_haji: 'TABUNG HAJI',
+  property: 'PROPERTY',
 }
 
 function fmtMYR(v: number) {
@@ -90,6 +104,22 @@ const EMPTY_FORM = {
   notes: '',
 }
 
+const TYPE_OPTIONS = [
+  { value: 'epf', label: 'EPF' },
+  { value: 'asb', label: 'ASB' },
+  { value: 'versa', label: 'Versa' },
+  { value: 'crypto', label: 'Crypto' },
+  { value: 'unit_trust', label: 'Unit Trust' },
+  { value: 'stocks_bursa', label: 'Bursa Stocks' },
+  { value: 'stocks_us', label: 'US Stocks' },
+  { value: 'fixed_deposit', label: 'Fixed Deposit' },
+  { value: 'gold', label: 'Gold' },
+  { value: 'bonds', label: 'Bonds' },
+  { value: 'tabung_haji', label: 'Tabung Haji' },
+  { value: 'property', label: 'Property' },
+  { value: 'other', label: 'Other' },
+]
+
 export default function InvestmentsPage() {
   const [investments, setInvestments] = useState<Investment[]>([])
   const [loading, setLoading] = useState(true)
@@ -120,6 +150,11 @@ export default function InvestmentsPage() {
   const [kcApiSecret, setKcApiSecret] = useState('')
   const [kcApiPassphrase, setKcApiPassphrase] = useState('')
   const [kcSaving, setKcSaving] = useState(false)
+
+  // Quick inline value update
+  const [quickEditId, setQuickEditId] = useState<string | null>(null)
+  const [quickEditValue, setQuickEditValue] = useState('')
+  const [quickEditSaving, setQuickEditSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -272,6 +307,30 @@ export default function InvestmentsPage() {
     await checkKucoin()
   }
 
+  function openQuickEdit(inv: Investment) {
+    setQuickEditId(inv.id)
+    setQuickEditValue(String(inv.currentValue))
+  }
+
+  function closeQuickEdit() {
+    setQuickEditId(null)
+    setQuickEditValue('')
+  }
+
+  async function handleQuickEditSave(id: string) {
+    const val = Number(quickEditValue)
+    if (isNaN(val)) return
+    setQuickEditSaving(true)
+    await fetch(`/api/investments/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentValue: val }),
+    })
+    setQuickEditSaving(false)
+    closeQuickEdit()
+    await load()
+  }
+
   const totalCostBasis = investments.reduce((a, b) => a + b.costBasis, 0)
   const totalCurrentValue = investments.reduce((a, b) => a + b.currentValue, 0)
   const totalReturn = totalCurrentValue - totalCostBasis
@@ -280,6 +339,13 @@ export default function InvestmentsPage() {
   const lastSynced = investments
     .filter(i => i.autoSync && i.lastSyncedAt)
     .sort((a, b) => new Date(b.lastSyncedAt!).getTime() - new Date(a.lastSyncedAt!).getTime())[0]?.lastSyncedAt ?? null
+
+  // Allocation by type (for portfolio summary panel)
+  const allocationByType: Record<string, number> = {}
+  for (const inv of investments) {
+    allocationByType[inv.type] = (allocationByType[inv.type] ?? 0) + inv.currentValue
+  }
+  const allocationTypes = Object.keys(allocationByType).filter(t => allocationByType[t] > 0)
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -450,131 +516,309 @@ export default function InvestmentsPage() {
               </div>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-              {investments.map(inv => {
-                const gain = inv.currentValue - inv.costBasis
-                const gainPct = inv.costBasis > 0 ? (gain / inv.costBasis) * 100 : 0
-                const gainColor = gain >= 0 ? '#a3e635' : '#ef4444'
-                const typeColor = TYPE_COLORS[inv.type] ?? '#6b7280'
-                const typeLabel = TYPE_LABELS[inv.type] ?? inv.type.toUpperCase()
-
-                return (
-                  <div key={inv.id} style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    {/* Card header */}
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-                          <span style={{
-                            fontSize: 9,
-                            ...S.mono,
-                            letterSpacing: '0.08em',
-                            color: typeColor,
-                            border: `1px solid ${typeColor}40`,
-                            borderRadius: 4,
-                            padding: '2px 6px',
-                          }}>
-                            {typeLabel}
-                          </span>
-                          {inv.autoSync && (
-                            <span style={{
-                              fontSize: 9,
-                              ...S.mono,
-                              letterSpacing: '0.08em',
-                              color: '#f97316',
-                              border: '1px solid rgba(249,115,22,0.3)',
-                              borderRadius: 4,
-                              padding: '2px 6px',
-                            }}>
-                              AUTO
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {inv.name}
-                        </div>
-                        {inv.provider && (
-                          <div style={{ fontSize: 11, color: '#5b5b59', ...S.sans, marginTop: 2 }}>{inv.provider}</div>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                        {!inv.autoSync && (
-                          <button
-                            onClick={() => setEditingInvestment({ ...inv })}
-                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', padding: 4, borderRadius: 6 }}
-                            onMouseEnter={e => { e.currentTarget.style.color = '#a3e635' }}
-                            onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
-                          >
-                            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                            </svg>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDelete(inv.id)}
-                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', padding: 4, borderRadius: 6 }}
-                          onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }}
-                          onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
-                        >
-                          <Icon name="close" width={14} height={14} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Ticker + units (crypto) */}
-                    {(inv.ticker || inv.units != null) && (
-                      <div style={{ display: 'flex', gap: 12 }}>
-                        {inv.ticker && (
-                          <div>
-                            <div style={{ ...S.label, marginBottom: 2 }}>TICKER</div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.mono }}>{inv.ticker}</div>
-                          </div>
-                        )}
-                        {inv.units != null && (
-                          <div>
-                            <div style={{ ...S.label, marginBottom: 2 }}>UNITS</div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.mono }}>
-                              {inv.units.toLocaleString('en-MY', { maximumSignificantDigits: 6 })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Values */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div>
-                        <div style={{ ...S.label, marginBottom: 3 }}>COST BASIS</div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: '#7a7a78', ...S.sans }}>
-                          {fmtMYR(inv.costBasis)}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ ...S.label, marginBottom: 3 }}>CURRENT VALUE</div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>
-                          {fmtMYR(inv.currentValue)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Gain/loss */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid #1a1a1a' }}>
-                      <div>
-                        <div style={{ ...S.label, marginBottom: 3 }}>GAIN / LOSS</div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: gainColor, ...S.sans, letterSpacing: '-0.02em' }}>
-                          {gain >= 0 ? '+' : '-'}{fmtMYR(gain)}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ ...S.label, marginBottom: 3 }}>RETURN</div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: gainColor, ...S.mono }}>
-                          {fmtPct(gainPct)}
-                        </div>
-                      </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Portfolio Summary Panel */}
+              <div style={{
+                background: '#111',
+                border: '1px solid #1a1a1a',
+                borderRadius: 14,
+                padding: '20px 24px',
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 32,
+                marginBottom: 16,
+              }}>
+                {/* Left — totals */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <div style={{ ...S.label, marginBottom: 4 }}>TOTAL VALUE</div>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: '#f5f5f4', ...S.sans, letterSpacing: '-0.03em' }}>
+                      {fmtMYR(totalCurrentValue)}
                     </div>
                   </div>
-                )
-              })}
+                  <div>
+                    <div style={{ ...S.label, marginBottom: 3 }}>TOTAL COST</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#7a7a78', ...S.sans }}>
+                      {fmtMYR(totalCostBasis)}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ ...S.label, marginBottom: 3 }}>OVERALL RETURN</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: totalReturn >= 0 ? '#a3e635' : '#ef4444', ...S.sans }}>
+                        {totalReturn >= 0 ? '+' : '-'}{fmtMYR(totalReturn)}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: totalReturn >= 0 ? '#a3e635' : '#ef4444', ...S.mono }}>
+                        {fmtPct(totalReturnPct)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right — allocation bar */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ ...S.label }}>ALLOCATION BY TYPE</div>
+                  {/* Stacked bar */}
+                  <div style={{ height: 10, borderRadius: 6, overflow: 'hidden', display: 'flex', width: '100%', background: '#1a1a1a' }}>
+                    {allocationTypes.map(t => {
+                      const pct = totalCurrentValue > 0 ? (allocationByType[t] / totalCurrentValue) * 100 : 0
+                      return (
+                        <div
+                          key={t}
+                          title={`${TYPE_LABELS[t] ?? t}: ${pct.toFixed(1)}%`}
+                          style={{
+                            width: `${pct}%`,
+                            background: TYPE_COLORS[t] ?? '#6b7280',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )
+                    })}
+                  </div>
+                  {/* Legend */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
+                    {allocationTypes.map(t => {
+                      const pct = totalCurrentValue > 0 ? (allocationByType[t] / totalCurrentValue) * 100 : 0
+                      return (
+                        <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <div style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: '50%',
+                            background: TYPE_COLORS[t] ?? '#6b7280',
+                            flexShrink: 0,
+                          }} />
+                          <span style={{ fontSize: 10, ...S.mono, color: '#7a7a78', letterSpacing: '0.06em' }}>
+                            {TYPE_LABELS[t] ?? t.toUpperCase()} {pct.toFixed(1)}%
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Investment cards grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14, alignItems: 'start' }}>
+                {investments.map(inv => {
+                  const gain = inv.currentValue - inv.costBasis
+                  const gainPct = inv.costBasis > 0 ? (gain / inv.costBasis) * 100 : 0
+                  const gainColor = gain >= 0 ? '#a3e635' : '#ef4444'
+                  const typeColor = TYPE_COLORS[inv.type] ?? '#6b7280'
+                  const typeLabel = TYPE_LABELS[inv.type] ?? inv.type.toUpperCase()
+                  const isQuickEdit = quickEditId === inv.id
+
+                  return (
+                    <div key={inv.id} style={{ display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: isQuickEdit ? '14px 14px 0 0' : 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {/* Card header */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                              <span style={{
+                                fontSize: 9,
+                                ...S.mono,
+                                letterSpacing: '0.08em',
+                                color: typeColor,
+                                border: `1px solid ${typeColor}40`,
+                                borderRadius: 4,
+                                padding: '2px 6px',
+                              }}>
+                                {typeLabel}
+                              </span>
+                              {inv.autoSync && (
+                                <span style={{
+                                  fontSize: 9,
+                                  ...S.mono,
+                                  letterSpacing: '0.08em',
+                                  color: '#f97316',
+                                  border: '1px solid rgba(249,115,22,0.3)',
+                                  borderRadius: 4,
+                                  padding: '2px 6px',
+                                }}>
+                                  AUTO
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {inv.name}
+                            </div>
+                            {inv.provider && (
+                              <div style={{ fontSize: 11, color: '#5b5b59', ...S.sans, marginTop: 2 }}>{inv.provider}</div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                            {/* Quick value update button */}
+                            <button
+                              onClick={() => isQuickEdit ? closeQuickEdit() : openQuickEdit(inv)}
+                              title="Quick update value"
+                              style={{ background: isQuickEdit ? 'rgba(163,230,53,0.1)' : 'transparent', border: 'none', cursor: 'pointer', color: isQuickEdit ? '#a3e635' : '#3a3a3a', padding: 4, borderRadius: 6 }}
+                              onMouseEnter={e => { if (!isQuickEdit) e.currentTarget.style.color = '#a3e635' }}
+                              onMouseLeave={e => { if (!isQuickEdit) e.currentTarget.style.color = '#3a3a3a' }}
+                            >
+                              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                <path d="M15 6l3 3" />
+                              </svg>
+                            </button>
+                            {!inv.autoSync && (
+                              <button
+                                onClick={() => setEditingInvestment({ ...inv })}
+                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', padding: 4, borderRadius: 6 }}
+                                onMouseEnter={e => { e.currentTarget.style.color = '#a3e635' }}
+                                onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
+                              >
+                                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDelete(inv.id)}
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', padding: 4, borderRadius: 6 }}
+                              onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }}
+                              onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
+                            >
+                              <Icon name="close" width={14} height={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Ticker + units (crypto) */}
+                        {(inv.ticker || inv.units != null) && (
+                          <div style={{ display: 'flex', gap: 12 }}>
+                            {inv.ticker && (
+                              <div>
+                                <div style={{ ...S.label, marginBottom: 2 }}>TICKER</div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.mono }}>{inv.ticker}</div>
+                              </div>
+                            )}
+                            {inv.units != null && (
+                              <div>
+                                <div style={{ ...S.label, marginBottom: 2 }}>UNITS</div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.mono }}>
+                                  {inv.units.toLocaleString('en-MY', { maximumSignificantDigits: 6 })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Values */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                          <div>
+                            <div style={{ ...S.label, marginBottom: 3 }}>COST BASIS</div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: '#7a7a78', ...S.sans }}>
+                              {fmtMYR(inv.costBasis)}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ ...S.label, marginBottom: 3 }}>CURRENT VALUE</div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>
+                              {fmtMYR(inv.currentValue)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Gain/loss */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid #1a1a1a' }}>
+                          <div>
+                            <div style={{ ...S.label, marginBottom: 3 }}>GAIN / LOSS</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: gainColor, ...S.sans, letterSpacing: '-0.02em' }}>
+                              {gain >= 0 ? '+' : '-'}{fmtMYR(gain)}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ ...S.label, marginBottom: 3 }}>RETURN</div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: gainColor, ...S.mono }}>
+                              {fmtPct(gainPct)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick edit inline row */}
+                      {isQuickEdit && (
+                        <div style={{
+                          background: '#0d0d0d',
+                          border: '1px solid #1a1a1a',
+                          borderTop: 'none',
+                          borderRadius: '0 0 14px 14px',
+                          padding: '10px 20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          flexWrap: 'wrap',
+                        }}>
+                          <span style={{ fontSize: 9, ...S.mono, letterSpacing: '0.08em', color: '#5b5b59', flexShrink: 0 }}>UPDATE CURRENT VALUE</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: 12, color: '#7a7a78', ...S.mono, flexShrink: 0 }}>RM</span>
+                            <input
+                              type="number"
+                              value={quickEditValue}
+                              onChange={e => setQuickEditValue(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') handleQuickEditSave(inv.id)
+                                if (e.key === 'Escape') closeQuickEdit()
+                              }}
+                              min="0"
+                              step="0.01"
+                              autoFocus
+                              style={{
+                                width: 160,
+                                background: '#111',
+                                border: '1px solid #222',
+                                borderRadius: 6,
+                                padding: '6px 10px',
+                                fontSize: 12,
+                                color: '#f5f5f4',
+                                fontFamily: '"JetBrains Mono", monospace',
+                                outline: 'none',
+                                colorScheme: 'dark',
+                              }}
+                            />
+                          </div>
+                          <button
+                            onClick={() => handleQuickEditSave(inv.id)}
+                            disabled={quickEditSaving}
+                            style={{
+                              background: quickEditSaving ? '#1a1a1a' : '#a3e635',
+                              color: quickEditSaving ? '#5b5b59' : '#0d0d0d',
+                              border: 'none',
+                              borderRadius: 6,
+                              padding: '6px 12px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: quickEditSaving ? 'default' : 'pointer',
+                              ...S.sans,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {quickEditSaving ? 'Saving…' : 'Save'}
+                          </button>
+                          <button
+                            onClick={closeQuickEdit}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: 11,
+                              color: '#5b5b59',
+                              ...S.sans,
+                              padding: '6px 4px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -598,12 +842,7 @@ export default function InvestmentsPage() {
                   <div>
                     <label style={labelStyle}>TYPE</label>
                     <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={inputStyle}>
-                      <option value="epf">EPF</option>
-                      <option value="asb">ASB</option>
-                      <option value="versa">Versa</option>
-                      <option value="crypto">Crypto</option>
-                      <option value="unit_trust">Unit Trust</option>
-                      <option value="other">Other</option>
+                      {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                   <div>
@@ -666,12 +905,7 @@ export default function InvestmentsPage() {
                   <div>
                     <label style={labelStyle}>TYPE</label>
                     <select value={editingInvestment.type} onChange={e => setEditingInvestment(p => p && ({ ...p, type: e.target.value }))} style={inputStyle}>
-                      <option value="epf">EPF</option>
-                      <option value="asb">ASB</option>
-                      <option value="versa">Versa</option>
-                      <option value="crypto">Crypto</option>
-                      <option value="unit_trust">Unit Trust</option>
-                      <option value="other">Other</option>
+                      {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                   <div>

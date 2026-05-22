@@ -22,6 +22,30 @@ interface Merchant {
   amount: number
 }
 
+interface HealthScoreComponent {
+  label: string
+  score: number
+  max: number
+  note: string
+}
+
+interface HealthScore {
+  total: number
+  grade: string
+  components: HealthScoreComponent[]
+}
+
+interface PacePrediction {
+  daysInMonth: number
+  daysPassed: number
+  daysRemaining: number
+  spent: number
+  dailyRate: number
+  projectedTotal: number
+  salary: number
+  isPastMonth: boolean
+}
+
 interface InsightsClientProps {
   month: string
   salary: number
@@ -32,6 +56,8 @@ interface InsightsClientProps {
   categories: CategoryStat[]
   topMerchants: Merchant[]
   flags: RedFlag[]
+  healthScore: HealthScore
+  pacePrediction: PacePrediction
 }
 
 const S = {
@@ -84,8 +110,234 @@ function DeltaBadge({ current, prev }: { current: number; prev: number }) {
   )
 }
 
+const GRADE_COLOR: Record<string, string> = {
+  A: '#a3e635',
+  B: '#86efac',
+  C: '#fbbf24',
+  D: '#f97171',
+  F: '#ef4444',
+}
+
+const GRADE_SUBTITLE: Record<string, string> = {
+  A: 'Excellent financial health',
+  B: 'Good — a few areas to work on',
+  C: 'Fair — focus on the weak spots',
+  D: 'Needs attention',
+  F: 'Critical issues to address',
+}
+
+function FinancialHealthCard({ healthScore }: { healthScore: HealthScore }) {
+  const gradeColor = GRADE_COLOR[healthScore.grade] ?? '#a3e635'
+  const subtitle = GRADE_SUBTITLE[healthScore.grade] ?? ''
+
+  return (
+    <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '22px 24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+        <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.08em' }}>
+          FINANCIAL HEALTH
+        </span>
+        <span style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#7a7a78', letterSpacing: '0.04em' }}>
+          Score: {healthScore.total}/100
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 24 }}>
+        {/* Grade circle */}
+        <div
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: '50%',
+            border: `3px solid ${gradeColor}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            background: 'transparent',
+          }}
+        >
+          <span style={{ fontSize: 32, fontWeight: 700, color: gradeColor, fontFamily: '"Geist", -apple-system, sans-serif', lineHeight: 1 }}>
+            {healthScore.grade}
+          </span>
+        </div>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif', marginBottom: 4 }}>
+            {subtitle}
+          </div>
+          <div style={{ fontSize: 12, color: '#5b5b59', fontFamily: '"Geist", -apple-system, sans-serif' }}>
+            Based on 5 financial indicators
+          </div>
+        </div>
+      </div>
+
+      {/* Component bars */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {healthScore.components.map((comp) => {
+          const pct = comp.max > 0 ? (comp.score / comp.max) * 100 : 0
+          return (
+            <div key={comp.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span
+                style={{
+                  width: 130,
+                  flexShrink: 0,
+                  fontSize: 11,
+                  fontFamily: '"JetBrains Mono", monospace',
+                  color: '#7a7a78',
+                  letterSpacing: '0.02em',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {comp.label}
+              </span>
+              <div style={{ flex: 1, height: 6, background: '#1a1a1a', borderRadius: 3, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    height: '100%',
+                    width: `${pct}%`,
+                    background: gradeColor,
+                    borderRadius: 3,
+                    transition: 'width 600ms ease',
+                  }}
+                />
+              </div>
+              <span
+                style={{
+                  width: 40,
+                  flexShrink: 0,
+                  fontSize: 11,
+                  fontFamily: '"JetBrains Mono", monospace',
+                  color: '#d0d0cf',
+                  textAlign: 'right',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {comp.score}/{comp.max}
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontFamily: '"JetBrains Mono", monospace',
+                  color: '#5b5b59',
+                  minWidth: 100,
+                  flexShrink: 0,
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {comp.note}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function SpendingPaceCard({ pace, fmt }: { pace: PacePrediction; fmt: (n: number) => string }) {
+  const dayPct = pace.daysInMonth > 0 ? (pace.daysPassed / pace.daysInMonth) * 100 : 0
+  const projectedOverSalary = pace.projectedTotal > pace.salary
+  const projectedVsSalary = pace.projectedTotal - pace.salary
+  const currentPacePct = pace.salary > 0 ? Math.round((pace.spent / pace.salary) * 100) : 0
+
+  return (
+    <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '22px 24px' }}>
+      <div style={{ ...S.label, marginBottom: 18 }}>SPENDING PACE</div>
+
+      {/* Day progress bar */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: '#7a7a78', fontFamily: '"Geist", -apple-system, sans-serif' }}>
+            Day {pace.daysPassed} of {pace.daysInMonth}
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#a3e635', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.02em' }}>
+            RM {fmt(pace.dailyRate)}/day
+          </span>
+        </div>
+        <div style={{ height: 8, background: '#1a1a1a', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+          <div
+            style={{
+              height: '100%',
+              width: `${dayPct}%`,
+              background: '#a3e635',
+              borderRadius: 4,
+              transition: 'width 600ms ease',
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+          <span style={{ fontSize: 10, color: '#3a3a3a', fontFamily: '"JetBrains Mono", monospace' }}>Day 1</span>
+          <span style={{ fontSize: 10, color: '#3a3a3a', fontFamily: '"JetBrains Mono", monospace' }}>Day {pace.daysInMonth}</span>
+        </div>
+      </div>
+
+      {/* Stats grid */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {pace.isPastMonth ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #1a1a1a' }}>
+            <span style={{ fontSize: 12, color: '#7a7a78', fontFamily: '"Geist", -apple-system, sans-serif' }}>Final total</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif' }}>
+              RM {fmt(pace.spent)}{' '}
+              <span style={{ fontSize: 11, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace' }}>
+                ({currentPacePct}% of salary)
+              </span>
+            </span>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #1a1a1a' }}>
+              <span style={{ fontSize: 12, color: '#7a7a78', fontFamily: '"Geist", -apple-system, sans-serif' }}>Spent so far</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif' }}>
+                RM {fmt(pace.spent)}{' '}
+                <span style={{ fontSize: 11, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace' }}>
+                  ({currentPacePct}% of salary)
+                </span>
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #1a1a1a' }}>
+              <span style={{ fontSize: 12, color: '#7a7a78', fontFamily: '"Geist", -apple-system, sans-serif' }}>Projected total</span>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: projectedOverSalary ? '#f87171' : '#a3e635',
+                  fontFamily: '"Geist", -apple-system, sans-serif',
+                }}
+              >
+                RM {fmt(pace.projectedTotal)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #1a1a1a' }}>
+              <span style={{ fontSize: 12, color: '#7a7a78', fontFamily: '"Geist", -apple-system, sans-serif' }}>vs salary</span>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: projectedOverSalary ? '#f87171' : '#a3e635',
+                  fontFamily: '"JetBrains Mono", monospace',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {projectedOverSalary ? '+' : '-'}RM {fmt(Math.abs(projectedVsSalary))}{' '}
+                <span style={{ fontSize: 11, fontWeight: 400 }}>{projectedOverSalary ? 'over' : 'under'}</span>
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0' }}>
+              <span style={{ fontSize: 12, color: '#7a7a78', fontFamily: '"Geist", -apple-system, sans-serif' }}>Days remaining</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif' }}>
+                {pace.daysRemaining} day{pace.daysRemaining !== 1 ? 's' : ''}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function InsightsClient({
-  month, salary, income, spent, remaining, savingsRate, categories, topMerchants, flags,
+  month, salary, income, spent, remaining, savingsRate, categories, topMerchants, flags, healthScore, pacePrediction,
 }: InsightsClientProps) {
   const router = useRouter()
   const [expandedFlag, setExpandedFlag] = useState<number | null>(null)
@@ -353,6 +605,12 @@ export default function InsightsClient({
             </div>
           </div>
         </div>
+
+        {/* Financial Health Score */}
+        <FinancialHealthCard healthScore={healthScore} />
+
+        {/* Spending Pace Prediction */}
+        <SpendingPaceCard pace={pacePrediction} fmt={fmt} />
 
         {/* AI Coach */}
         <AICoachCard month={month} />
