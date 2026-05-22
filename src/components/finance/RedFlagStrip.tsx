@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import { Icon } from './icons'
 
 interface RedFlag {
@@ -9,6 +10,7 @@ interface RedFlag {
   detail: string
   tip: string
   tone?: 'danger' | 'warn'
+  link?: string
 }
 
 interface RedFlagStripProps {
@@ -122,22 +124,26 @@ export default function RedFlagStrip({ flag, onDismiss }: RedFlagStripProps) {
         </div>
 
         {/* Investigate button */}
-        <button
-          style={{
-            background: 'transparent',
-            border: `1px solid ${c.border}`,
-            borderRadius: 8,
-            color: c.solid,
-            fontSize: 12,
-            fontFamily: '"Geist", -apple-system, sans-serif',
-            padding: '7px 14px',
-            cursor: 'pointer',
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Investigate →
-        </button>
+        {flag.link && (
+          <Link
+            href={flag.link}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${c.border}`,
+              borderRadius: 8,
+              color: c.solid,
+              fontSize: 12,
+              fontFamily: '"Geist", -apple-system, sans-serif',
+              padding: '7px 14px',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+              textDecoration: 'none',
+              display: 'inline-block',
+            }}
+          >
+            Investigate →
+          </Link>
+        )}
 
         {/* Dismiss */}
         <button

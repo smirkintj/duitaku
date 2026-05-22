@@ -304,40 +304,45 @@ export default async function HomePage({ searchParams }: PageProps) {
   }))
   const flags = computeRedFlags(salary, remaining, flagInput, expenseTxs, merchantAnomalies, projectedRemaining, daysIn - dayOfMonth)
 
-  // Setup nudges — check what the user hasn't configured yet
+  // Setup nudges — ordered by priority, each with a step number for guidance
   const allNudges: NudgeItem[] = [
     {
-      id: 'transactions',
-      title: "No spending recorded this month",
-      body: "Import your bank or CC statement, or add transactions manually to track where your money goes.",
-      href: '/import',
-      actionLabel: 'Import statement',
-    },
-    {
       id: 'bills',
-      title: "No recurring bills set up",
-      body: "Add your fixed commitments — rent, utilities, subscriptions — so your buffer reflects the full picture.",
+      step: 1,
+      title: "Add your recurring commitments",
+      body: "Log fixed monthly costs — rent, utilities, phone, subscriptions. This is what your buffer is calculated against.",
       href: '/bills',
       actionLabel: 'Add bills',
     },
     {
+      id: 'transactions',
+      step: 2,
+      title: "Import your bank statement",
+      body: "Upload your bank or CC PDF to see where your money actually went this month. The dashboard numbers update immediately.",
+      href: '/import',
+      actionLabel: 'Import statement',
+    },
+    {
       id: 'cc',
-      title: "No credit card linked",
-      body: "Link a CC account so charges are tracked separately from cash spending and your buffer stays accurate.",
-      href: '/settings',
+      step: 3,
+      title: "Link a credit card account",
+      body: "Adding a CC account separates deferred charges from cash spending, so your buffer reflects actual cash available.",
+      href: '/accounts',
       actionLabel: 'Add card',
     },
     {
       id: 'investments',
-      title: "Investments not tracked",
-      body: "Add your EPF, ASB, unit trusts or crypto so your net worth includes everything you own.",
+      step: 4,
+      title: "Track your investments",
+      body: "Add EPF, ASB, unit trusts or crypto so net worth shows the full picture, not just your bank balance.",
       href: '/investments',
       actionLabel: 'Add investments',
     },
     {
       id: 'loans',
-      title: "No loans recorded",
-      body: "Track your car loan, mortgage or personal financing to see your true net worth and payoff timeline.",
+      step: 5,
+      title: "Record any loans",
+      body: "Add your car loan, mortgage or PTPTN so debt is included in net worth and you can see the payoff timeline.",
       href: '/loans',
       actionLabel: 'Add loan',
     },

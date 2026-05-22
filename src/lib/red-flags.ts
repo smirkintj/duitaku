@@ -4,6 +4,7 @@ export interface RedFlag {
   detail: string
   tip: string
   tone?: 'danger' | 'warn'
+  link?: string
 }
 
 interface CategoryStats {
@@ -43,6 +44,7 @@ export function computeRedFlags(
         detail: `You've spent RM ${cat.spent.toFixed(2)} on ${cat.name} — RM ${(cat.spent - cat.monthlyLimit).toFixed(2)} over your RM ${cat.monthlyLimit.toFixed(0)} limit.`,
         tip: `Move remaining ${cat.name} spending to next month or increase the budget if this was intentional.`,
         tone: 'danger',
+        link: '/categories',
       })
     } else if (pct >= 80) {
       flags.push({
@@ -51,6 +53,7 @@ export function computeRedFlags(
         detail: `RM ${cat.spent.toFixed(2)} spent of your RM ${cat.monthlyLimit.toFixed(0)} ${cat.name} budget — only RM ${(cat.monthlyLimit - cat.spent).toFixed(2)} left.`,
         tip: `You have RM ${(cat.monthlyLimit - cat.spent).toFixed(2)} remaining. Slow down ${cat.name} spending to stay on track.`,
         tone: 'warn',
+        link: '/categories',
       })
     }
   }
@@ -64,6 +67,7 @@ export function computeRedFlags(
         metric: `+${pct}%`,
         detail: `You've spent RM ${cat.spent.toFixed(2)} on ${cat.name} this month — ${(cat.spent / cat.prior3moAvg).toFixed(1)}× your 3-month average (RM ${cat.prior3moAvg.toFixed(2)}).`,
         tip: `Review your ${cat.name} transactions and consider setting a stricter monthly cap.`,
+        link: '/transactions',
       })
     }
   }
@@ -78,6 +82,7 @@ export function computeRedFlags(
           metric: `+RM ${diff.toFixed(2)}`,
           detail: `Your ${cat.name} spending rose from RM ${cat.prevMonthTotal.toFixed(2)} last month to RM ${cat.spent.toFixed(2)} this month.`,
           tip: 'Check if a subscription price increased or a new one was added.',
+          link: '/bills',
         })
       }
     }
@@ -91,6 +96,7 @@ export function computeRedFlags(
       metric: `${pct}% left`,
       detail: `Only RM ${remaining.toFixed(2)} remains — less than 10% of your salary.`,
       tip: 'Pause discretionary spending for the rest of the month to avoid a deficit.',
+      link: '/transactions',
     })
   }
 
@@ -104,6 +110,7 @@ export function computeRedFlags(
         metric: `RM ${tx.amount.toFixed(2)}`,
         detail: `A single transaction of RM ${tx.amount.toFixed(2)} exceeds 20% of your monthly salary.`,
         tip: 'Verify this purchase was intentional and budgeted for.',
+        link: '/transactions',
       })
       break
     }
@@ -120,6 +127,7 @@ export function computeRedFlags(
           detail: `RM ${m.currentTotal.toFixed(2)} at ${m.merchant} this cycle — ${(m.currentTotal / m.prev3avg).toFixed(1)}× your usual RM ${m.prev3avg.toFixed(2)}.`,
           tip: `Check your recent ${m.merchant} transactions — this may be an unexpected charge.`,
           tone: 'warn',
+          link: '/merchants',
         })
       }
     }
@@ -135,6 +143,7 @@ export function computeRedFlags(
         detail: `At your current daily spending rate, you'll have only RM ${projectedRemaining.toFixed(2)} left at cycle end with ${daysLeft} days to go.`,
         tip: 'Reduce variable spending now to avoid going into deficit before payday.',
         tone: 'danger',
+        link: '/transactions',
       })
     }
   }
