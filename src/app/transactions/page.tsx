@@ -199,62 +199,63 @@ function TransactionsContent() {
             </div>
           </div>
         ) : (
-        <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '10px 20px', borderBottom: '1px solid #1a1a1a' }}>
-            {['DATE', 'MERCHANT', 'CATEGORY', 'AMOUNT', '', ''].map((h, i) => (
-              <span key={i} style={S.label}>{h}</span>
-            ))}
-          </div>
+          <>
+            <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '10px 20px', borderBottom: '1px solid #1a1a1a' }}>
+                {['DATE', 'MERCHANT', 'CATEGORY', 'AMOUNT', '', ''].map((h, i) => (
+                  <span key={i} style={S.label}>{h}</span>
+                ))}
+              </div>
 
-          {loading ? (
-            <div style={{ padding: '40px 20px', textAlign: 'center', ...S.label }}>LOADING…</div>
-          ) : filtered.length === 0 ? (
-            <div style={{ padding: '40px 20px', textAlign: 'center', ...S.label }}>NO TRANSACTIONS</div>
-          ) : (
-            filtered.map((tx, i) => {
-              const cat = tx.categoryId ? catMap.get(tx.categoryId) : undefined
-              const label = tx.merchant ?? tx.note ?? 'Unknown'
-              return (
-                <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '13px 20px', borderBottom: i < filtered.length - 1 ? '1px solid #141414' : 'none', alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, color: '#7a7a78', ...S.mono }}>{fmtDate(tx.date)}</span>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                    <span style={{ fontSize: 13, color: '#f5f5f4', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-                    {tx.isRecurring && <span style={{ fontSize: 9, color: '#a3e635', ...S.mono, letterSpacing: '0.06em' }}>RECURRING</span>}
-                  </div>
-                  <span style={{ fontSize: 12, color: '#5b5b59', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {cat?.name ?? '—'}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: tx.type === 'income' ? '#a3e635' : '#f5f5f4', ...S.sans, textAlign: 'right' }}>
-                    {tx.type === 'income' ? '+' : '−'} RM {tx.amount.toFixed(2)}
-                  </span>
-                  <button
-                    onClick={() => setEditTx(tx)}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, padding: 4, transition: 'color 140ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#a3e635' }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
-                    title="Edit"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  </button>
-                  <button
-                    onClick={() => deleteTx(tx.id)}
-                    disabled={deleting === tx.id}
-                    style={{ background: 'transparent', border: 'none', cursor: deleting === tx.id ? 'default' : 'pointer', color: '#3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, padding: 4, transition: 'color 140ms' }}
-                    onMouseEnter={e => { if (deleting !== tx.id) e.currentTarget.style.color = '#ef4444' }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
-                    title="Delete"
-                  >
-                    <Icon name="close" width={14} height={14} />
-                  </button>
-                </div>
-              )
-            })
-          )}
-        </div>
-        )}
-
-        {!loading && filtered.length > 0 && (
-          <div style={{ ...S.label, textAlign: 'right' }}>{filtered.length} TRANSACTION{filtered.length !== 1 ? 'S' : ''}</div>
+              {loading ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', ...S.label }}>LOADING…</div>
+              ) : filtered.length === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', ...S.label }}>NO TRANSACTIONS</div>
+              ) : (
+                filtered.map((tx, i) => {
+                  const cat = tx.categoryId ? catMap.get(tx.categoryId) : undefined
+                  const label = tx.merchant ?? tx.note ?? 'Unknown'
+                  return (
+                    <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '13px 20px', borderBottom: i < filtered.length - 1 ? '1px solid #141414' : 'none', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, color: '#7a7a78', ...S.mono }}>{fmtDate(tx.date)}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                        <span style={{ fontSize: 13, color: '#f5f5f4', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                        {tx.isRecurring && <span style={{ fontSize: 9, color: '#a3e635', ...S.mono, letterSpacing: '0.06em' }}>RECURRING</span>}
+                      </div>
+                      <span style={{ fontSize: 12, color: '#5b5b59', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {cat?.name ?? '—'}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: tx.type === 'income' ? '#a3e635' : '#f5f5f4', ...S.sans, textAlign: 'right' }}>
+                        {tx.type === 'income' ? '+' : '−'} RM {tx.amount.toFixed(2)}
+                      </span>
+                      <button
+                        onClick={() => setEditTx(tx)}
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, padding: 4, transition: 'color 140ms' }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#a3e635' }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
+                        title="Edit"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                      <button
+                        onClick={() => deleteTx(tx.id)}
+                        disabled={deleting === tx.id}
+                        style={{ background: 'transparent', border: 'none', cursor: deleting === tx.id ? 'default' : 'pointer', color: '#3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, padding: 4, transition: 'color 140ms' }}
+                        onMouseEnter={e => { if (deleting !== tx.id) e.currentTarget.style.color = '#ef4444' }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a' }}
+                        title="Delete"
+                      >
+                        <Icon name="close" width={14} height={14} />
+                      </button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            {!loading && filtered.length > 0 && (
+              <div style={{ ...S.label, textAlign: 'right' }}>{filtered.length} TRANSACTION{filtered.length !== 1 ? 'S' : ''}</div>
+            )}
+          </>
         )}
       </div>
 
