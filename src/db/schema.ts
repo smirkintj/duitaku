@@ -9,6 +9,16 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
+export const pendingRegistrations = pgTable('pending_registrations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  email: text('email').notNull(),
+  name: text('name'),
+  passwordHash: text('password_hash').notNull(),
+  otp: text('otp').notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
 export const financeAccounts = pgTable('finance_accounts', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
