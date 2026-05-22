@@ -1,14 +1,18 @@
 import { db } from '@/db'
 import { financeAccounts, financeInvestments, financeSavingsGoals, financeLoans, financeBnpl } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const [accounts, investments, savings, loans, bnplPlans] = await Promise.all([
-    db.select().from(financeAccounts),
-    db.select().from(financeInvestments),
-    db.select().from(financeSavingsGoals),
-    db.select().from(financeLoans).where(eq(financeLoans.isActive, true)),
-    db.select().from(financeBnpl).where(eq(financeBnpl.isActive, true)),
+    db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId)),
+    db.select().from(financeInvestments).where(eq(financeInvestments.userId, userId)),
+    db.select().from(financeSavingsGoals).where(eq(financeSavingsGoals.userId, userId)),
+    db.select().from(financeLoans).where(and(eq(financeLoans.userId, userId), eq(financeLoans.isActive, true))),
+    db.select().from(financeBnpl).where(and(eq(financeBnpl.userId, userId), eq(financeBnpl.isActive, true))),
   ])
 
   // ASSETS

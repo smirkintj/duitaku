@@ -1,6 +1,7 @@
 import { db } from '@/db'
 import { financeTransactions, financeCategories, financeSalary } from '@/db/schema'
-import { and, gte, lte, desc } from 'drizzle-orm'
+import { and, gte, lte, desc, eq } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 function padMonth(n: number) {
   return String(n).padStart(2, '0')
@@ -19,6 +20,9 @@ function monthsBack(anchor: string, n: number): string[] {
 }
 
 export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { searchParams } = new URL(request.url)
   const anchor = searchParams.get('m') ?? (() => {
     const now = new Date()
@@ -40,9 +44,9 @@ export async function GET(request: Request) {
         categoryId: financeTransactions.categoryId,
       })
       .from(financeTransactions)
-      .where(and(gte(financeTransactions.date, rangeStart), lte(financeTransactions.date, rangeEnd))),
-    db.select().from(financeCategories),
-    db.select().from(financeSalary).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
+      .where(and(eq(financeTransactions.userId, userId), gte(financeTransactions.date, rangeStart), lte(financeTransactions.date, rangeEnd))),
+    db.select().from(financeCategories).where(eq(financeCategories.userId, userId)),
+    db.select().from(financeSalary).where(eq(financeSalary.userId, userId)).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
   ])
 
   const catMap = new Map(categories.map((c) => [c.id, c]))

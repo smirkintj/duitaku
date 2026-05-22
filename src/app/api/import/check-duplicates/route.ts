@@ -1,6 +1,7 @@
 import { db } from '@/db'
 import { financeTransactions } from '@/db/schema'
 import { and, gte, lte, eq } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 interface IncomingTx {
   _id: number
@@ -35,6 +36,9 @@ function merchantsSimilar(a: string, b: string): boolean {
 //   2. Fuzzy: same amount + date within ±2 days + merchant names overlap
 //      (catches bill-paid transactions whose date/name differs slightly from the PDF)
 export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { transactions } = await request.json() as { transactions: IncomingTx[] }
   if (!transactions.length) return Response.json({ duplicateIds: [] })
 
@@ -52,6 +56,7 @@ export async function POST(request: Request) {
     })
     .from(financeTransactions)
     .where(and(
+      eq(financeTransactions.userId, userId),
       gte(financeTransactions.date, rangeStart),
       lte(financeTransactions.date, rangeEnd),
       eq(financeTransactions.type, 'expense'),

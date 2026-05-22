@@ -1,13 +1,17 @@
 import { db } from '@/db'
 import { financeBills, financeBnpl, financeAccounts, financeSalary } from '@/db/schema'
-import { eq, desc } from 'drizzle-orm'
+import { and, eq, desc } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const [salary, bills, bnplPlans, accounts] = await Promise.all([
-    db.select().from(financeSalary).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
-    db.select().from(financeBills).where(eq(financeBills.isActive, true)),
-    db.select().from(financeBnpl).where(eq(financeBnpl.isActive, true)),
-    db.select().from(financeAccounts),
+    db.select().from(financeSalary).where(eq(financeSalary.userId, userId)).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
+    db.select().from(financeBills).where(and(eq(financeBills.userId, userId), eq(financeBills.isActive, true))),
+    db.select().from(financeBnpl).where(and(eq(financeBnpl.userId, userId), eq(financeBnpl.isActive, true))),
+    db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId)),
   ])
 
   const salaryAmount = salary[0]?.amount ?? 0

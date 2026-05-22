@@ -1,6 +1,7 @@
 import { db } from '@/db'
 import { financeTransactions } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 interface ImportTx {
   date: string
@@ -12,6 +13,9 @@ interface ImportTx {
 }
 
 export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const body = await request.json() as { transactions: ImportTx[] }
   const { transactions } = body
 
@@ -19,11 +23,11 @@ export async function POST(request: Request) {
   let skipped = 0
 
   for (const tx of transactions) {
-    // Check if importHash already exists
+    // Check if importHash already exists for this user
     const existing = await db
       .select({ id: financeTransactions.id })
       .from(financeTransactions)
-      .where(eq(financeTransactions.importHash, tx.importHash))
+      .where(and(eq(financeTransactions.userId, userId), eq(financeTransactions.importHash, tx.importHash)))
       .limit(1)
 
     if (existing.length > 0) {
@@ -32,6 +36,7 @@ export async function POST(request: Request) {
     }
 
     await db.insert(financeTransactions).values({
+      userId,
       accountId: null,
       categoryId: tx.categoryId ?? null,
       amount: tx.amount,

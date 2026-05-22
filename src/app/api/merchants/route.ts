@@ -2,12 +2,16 @@ import { db } from '@/db'
 import { financeTransactions } from '@/db/schema'
 import { and, gte, lte, eq } from 'drizzle-orm'
 import { getPayCycle, prevCycleMonth } from '@/lib/pay-cycle'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 function shiftDate(d: string, days: number): string {
   const dt = new Date(d); dt.setDate(dt.getDate() + days); return dt.toISOString().slice(0, 10)
 }
 
 export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { searchParams } = new URL(request.url)
   const baseMonth = searchParams.get('m') ?? ''
   const payDay = parseInt(searchParams.get('payDay') ?? '1', 10)
@@ -27,6 +31,7 @@ export async function GET(request: Request) {
     .select({ amount: financeTransactions.amount, date: financeTransactions.date, merchant: financeTransactions.merchant })
     .from(financeTransactions)
     .where(and(
+      eq(financeTransactions.userId, userId),
       gte(financeTransactions.date, rangeStart),
       lte(financeTransactions.date, rangeEnd),
       eq(financeTransactions.type, 'expense'),

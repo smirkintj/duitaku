@@ -49,6 +49,9 @@ function prevMonths(month: string, n: number): { start: string; end: string }[] 
 }
 
 export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ noApiKey: true })
   }
@@ -63,21 +66,21 @@ export async function POST(request: Request) {
   // Fetch all data in parallel
   const prior3 = prevMonths(month, 3)
   const [salary, currentTxs, categories, bills, billPayments, bnplPlans, savingsGoals, accounts] = await Promise.all([
-    db.select().from(financeSalary).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
+    db.select().from(financeSalary).where(eq(financeSalary.userId, userId)).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
     db.select().from(financeTransactions)
-      .where(and(gte(financeTransactions.date, start), lte(financeTransactions.date, end))),
-    db.select().from(financeCategories),
-    db.select().from(financeBills).where(eq(financeBills.isActive, true)),
+      .where(and(eq(financeTransactions.userId, userId), gte(financeTransactions.date, start), lte(financeTransactions.date, end))),
+    db.select().from(financeCategories).where(eq(financeCategories.userId, userId)),
+    db.select().from(financeBills).where(and(eq(financeBills.userId, userId), eq(financeBills.isActive, true))),
     db.select().from(financeBillPayments).where(eq(financeBillPayments.month, month)),
-    db.select().from(financeBnpl).where(eq(financeBnpl.isActive, true)),
-    db.select().from(financeSavingsGoals),
-    db.select().from(financeAccounts),
+    db.select().from(financeBnpl).where(and(eq(financeBnpl.userId, userId), eq(financeBnpl.isActive, true))),
+    db.select().from(financeSavingsGoals).where(eq(financeSavingsGoals.userId, userId)),
+    db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId)),
   ])
 
   const priorTxsArr = await Promise.all(
     prior3.map(({ start: s, end: e }) =>
       db.select().from(financeTransactions)
-        .where(and(gte(financeTransactions.date, s), lte(financeTransactions.date, e)))
+        .where(and(eq(financeTransactions.userId, userId), gte(financeTransactions.date, s), lte(financeTransactions.date, e)))
     )
   )
 
@@ -105,8 +108,9 @@ export async function POST(request: Request) {
     return { name: cat.name, spent: catSpent, prior3moAvg: avg, budget: cat.monthlyLimit }
   }).filter((c) => c.spent > 0)
 
-  // Bills
-  const paidBillIds = new Set(billPayments.map((p) => p.billId))
+  // Bills — financeBillPayments has no userId, derive security from billIds belonging to the user
+  const userBillIds = new Set(bills.map((b) => b.id))
+  const paidBillIds = new Set(billPayments.filter((p) => userBillIds.has(p.billId)).map((p) => p.billId))
   const billsSummary = bills.map((b) => ({
     name: b.name,
     amount: b.amount,
@@ -245,9 +249,10 @@ Provide 3-4 bullets and 3-4 plan steps. Be specific with amounts and percentages
     data = JSON.parse(match[0])
   }
 
-  // Upsert: delete old row for this month then insert fresh
-  await db.delete(financeAiInsights).where(eq(financeAiInsights.month, month))
+  // Upsert: delete old row for this month/user then insert fresh
+  await db.delete(financeAiInsights).where(and(eq(financeAiInsights.userId, userId), eq(financeAiInsights.month, month)))
   const [saved] = await db.insert(financeAiInsights).values({
+    userId,
     month,
     data: JSON.stringify(data),
   }).returning()
