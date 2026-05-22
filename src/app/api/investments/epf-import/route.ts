@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -29,6 +30,9 @@ export interface EpfStatement {
 }
 
 export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
   }

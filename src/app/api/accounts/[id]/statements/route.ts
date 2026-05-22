@@ -1,9 +1,21 @@
 import { db } from '@/db'
-import { financeCcStatements } from '@/db/schema'
-import { eq, desc } from 'drizzle-orm'
+import { financeCcStatements, financeAccounts } from '@/db/schema'
+import { and, eq, desc } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function verifyAccountOwnership(accountId: string, userId: string): Promise<boolean> {
+  const [account] = await db.select({ id: financeAccounts.id }).from(financeAccounts)
+    .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
+  return !!account
+}
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { id } = await params
+  if (!(await verifyAccountOwnership(id, userId))) return Response.json({ error: 'Not found' }, { status: 404 })
+
   const statements = await db.select().from(financeCcStatements)
     .where(eq(financeCcStatements.accountId, id))
     .orderBy(desc(financeCcStatements.month))
@@ -11,7 +23,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { id } = await params
+  if (!(await verifyAccountOwnership(id, userId))) return Response.json({ error: 'Not found' }, { status: 404 })
+
   const body = await request.json() as {
     month: string
     statementAmount: number
@@ -33,7 +50,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const { id } = await params
+  if (!(await verifyAccountOwnership(id, userId))) return Response.json({ error: 'Not found' }, { status: 404 })
+
   const body = await request.json() as {
     statementId: string
     paidAmount?: number

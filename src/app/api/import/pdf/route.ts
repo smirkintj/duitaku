@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 async function extractPdfText(buffer: Buffer, password?: string): Promise<string> {
   // Use pdf-parse's own bundled pdfjs v1.10.100 — it already sets disableWorker=true
@@ -69,6 +70,9 @@ function parseTransactionsFromText(
 }
 
 export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File | null

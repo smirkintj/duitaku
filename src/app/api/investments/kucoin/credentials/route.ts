@@ -1,8 +1,12 @@
 import { db } from '@/db'
 import { financeApiKeys } from '@/db/schema'
 import { eq } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const allKeys = await db.select().from(financeApiKeys)
   const keySet = new Set(allKeys.map(r => r.key))
   const configured =
@@ -13,6 +17,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   const body = await request.json() as { apiKey: string; apiSecret: string; apiPassphrase: string }
 
   const upsert = async (key: string, value: string) => {

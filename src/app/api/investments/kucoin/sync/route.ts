@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import { db } from '@/db'
 import { financeInvestments, financeApiKeys } from '@/db/schema'
 import { eq, and } from 'drizzle-orm'
+import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 function kucoinSign(secret: string, timestamp: string, method: string, path: string, body = '') {
   return crypto.createHmac('sha256', secret).update(timestamp + method + path + body).digest('base64')
@@ -28,7 +29,10 @@ async function kucoinFetch(apiKey: string, apiSecret: string, apiPassphrase: str
   return json
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return unauthorized()
+
   try {
     const allKeys = await db.select().from(financeApiKeys)
     const keyMap = Object.fromEntries(allKeys.map(r => [r.key, r.value]))
@@ -126,7 +130,7 @@ export async function POST() {
     let synced = 0
     for (const h of holdings) {
       const existing = await db.select().from(financeInvestments)
-        .where(and(eq(financeInvestments.ticker, h.ticker), eq(financeInvestments.provider, 'kucoin')))
+        .where(and(eq(financeInvestments.userId, userId), eq(financeInvestments.ticker, h.ticker), eq(financeInvestments.provider, 'kucoin')))
         .limit(1)
 
       if (existing.length > 0) {
@@ -134,6 +138,7 @@ export async function POST() {
           .where(eq(financeInvestments.id, existing[0].id))
       } else {
         await db.insert(financeInvestments).values({
+          userId,
           name: `${h.ticker} (KuCoin)`, type: 'crypto', provider: 'kucoin',
           ticker: h.ticker, units: h.units, costBasis: 0, currentValue: h.valueMYR,
           currency: 'MYR', autoSync: true, lastSyncedAt: new Date(),
