@@ -251,6 +251,7 @@ function TransactionsContent() {
             })
           )}
         </div>
+        )}
 
         {!loading && filtered.length > 0 && (
           <div style={{ ...S.label, textAlign: 'right' }}>{filtered.length} TRANSACTION{filtered.length !== 1 ? 'S' : ''}</div>
