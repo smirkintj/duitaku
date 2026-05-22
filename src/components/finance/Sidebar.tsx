@@ -26,6 +26,7 @@ const NAV_MAIN: NavItem[] = [
   { key: 'add', label: 'Add', icon: 'add' },
   { key: 'transactions', label: 'Transactions', icon: 'tx' },
   { key: 'bills', label: 'Bills', icon: 'bills' },
+  { key: 'cashflow', label: 'Cash Flow', icon: 'calendar' },
   { key: 'trends', label: 'Trends', icon: 'trends' },
   { key: 'import', label: 'Import', icon: 'import' },
   { key: 'ai', label: 'AI Coach', icon: 'ai', pill: 'AI' },

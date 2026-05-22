@@ -1,10 +1,11 @@
 import { db } from '@/db'
-import { financeTransactions, financeCategories, financeSalary, financeBills, financeBillPayments, financeBnpl, financeSavingsGoals, financeAccounts, financeCcStatements, financeAiInsights } from '@/db/schema'
+import { financeTransactions, financeCategories, financeSalary, financeBills, financeBillPayments, financeBnpl, financeSavingsGoals, financeAccounts, financeCcStatements, financeAiInsights, financeInvestments } from '@/db/schema'
 import { and, gte, lte, desc, eq, inArray } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
 interface CoachData {
+  focus: { area: string; verdict: string; detail: string }
   summary: string
   bullets: { tone: string; text: string }[]
   plan: { step: number; title: string; amount: number; status: string; note: string }[]
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
 
   // Fetch all data in parallel
   const prior3 = prevMonths(month, 3)
-  const [salary, currentTxs, categories, bills, billPayments, bnplPlans, savingsGoals, accounts] = await Promise.all([
+  const [salary, currentTxs, categories, bills, billPayments, bnplPlans, savingsGoals, accounts, investments] = await Promise.all([
     db.select().from(financeSalary).where(eq(financeSalary.userId, userId)).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
     db.select().from(financeTransactions)
       .where(and(eq(financeTransactions.userId, userId), gte(financeTransactions.date, start), lte(financeTransactions.date, end))),
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
     db.select().from(financeBnpl).where(and(eq(financeBnpl.userId, userId), eq(financeBnpl.isActive, true))),
     db.select().from(financeSavingsGoals).where(eq(financeSavingsGoals.userId, userId)),
     db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId)),
+    db.select().from(financeInvestments).where(eq(financeInvestments.userId, userId)),
   ])
 
   const priorTxsArr = await Promise.all(
@@ -177,50 +179,71 @@ export async function POST(request: Request) {
     pct: g.targetAmount ? Math.round((g.currentAmount / g.targetAmount) * 100) : null,
   }))
 
-  const prompt = `You are an AI financial coach for a Malaysian. Analyze this comprehensive personal finance data and provide actionable insights.
+  const totalInvestmentValue = investments.reduce((a, i) => a + i.currentValue, 0)
+  const totalInvestmentCost = investments.reduce((a, i) => a + i.costBasis, 0)
+  const investmentGainLoss = totalInvestmentValue - totalInvestmentCost
+  const investmentGainPct = totalInvestmentCost > 0 ? ((investmentGainLoss / totalInvestmentCost) * 100).toFixed(1) : null
+  const investmentSummary = investments.map((i) => {
+    const gl = i.currentValue - i.costBasis
+    const glPct = i.costBasis > 0 ? ((gl / i.costBasis) * 100).toFixed(1) : null
+    return `- ${i.name} (${i.type}${i.provider ? ` / ${i.provider}` : ''}): RM ${i.currentValue.toFixed(2)} current value, cost RM ${i.costBasis.toFixed(2)}${glPct ? `, ${Number(glPct) >= 0 ? '+' : ''}${glPct}% return` : ''}`
+  })
 
-Month: ${month}
-Monthly Salary: RM ${salaryAmount.toFixed(2)}
-Total Expenses Recorded: RM ${spent.toFixed(2)}
-Total Income Received: RM ${income.toFixed(2)}
-Remaining (after expenses): RM ${Math.max(0, salaryAmount - spent).toFixed(2)}
+  const savingsRate = salaryAmount > 0 ? Math.round(((salaryAmount - spent - totalBillsCommitment - totalMonthlyBnpl) / salaryAmount) * 100) : 0
+  const debtToIncome = salaryAmount > 0 ? Math.round(((totalBillsCommitment + totalMonthlyBnpl + totalCcOutstanding / 12) / salaryAmount) * 100) : 0
 
-SPENDING BY CATEGORY:
-${catSummaries.map((c) => `- ${c.name}: RM ${c.spent.toFixed(2)} spent (budget: ${c.budget ? `RM ${c.budget}` : 'none'}, 3mo avg: RM ${c.prior3moAvg.toFixed(2)})`).join('\n') || '- No category data'}
+  const prompt = `You are an AI financial coach for a Malaysian. Analyze this personal finance data for ${month} and give focused, honest, actionable insights. Be direct — point out real issues or real wins, not generic advice.
 
-MONTHLY BILLS & COMMITMENTS (total commitment: RM ${totalBillsCommitment.toFixed(2)}):
-${billsSummary.length > 0 ? billsSummary.map((b) => `- ${b.name}: RM ${b.amount.toFixed(2)} — ${b.paid ? 'PAID' : 'UNPAID'}`).join('\n') : '- No bills configured'}
-Paid: RM ${totalBillsPaid.toFixed(2)} | Still unpaid this month: RM ${totalBillsUnpaid.toFixed(2)}
+INCOME & EXPENSES:
+- Monthly salary: RM ${salaryAmount.toFixed(2)}
+- Variable spending this month: RM ${spent.toFixed(2)} (${salaryAmount > 0 ? Math.round((spent / salaryAmount) * 100) : 0}% of salary)
+- Fixed commitments (bills + BNPL): RM ${(totalBillsCommitment + totalMonthlyBnpl).toFixed(2)}
+- Estimated savings rate: ${savingsRate}%
+- Debt-to-income ratio (monthly): ${debtToIncome}%
 
-BNPL / INSTALLMENTS (this month's commitment: RM ${totalMonthlyBnpl.toFixed(2)}):
-${bnplSummary.length > 0 ? bnplSummary.map((p) => {
-  if (!p.activeThisMonth && p.monthsUntilStart > 0) {
-    return `- ${p.merchant} (${p.provider}): starts in ${p.monthsUntilStart} month(s) — RM ${p.installmentAmount.toFixed(2)}/month for ${p.totalInstallments} installments (NOT due this month)`
-  }
-  return `- ${p.merchant} (${p.provider}): installment ${p.installmentNumber}/${p.totalInstallments} due this month — RM ${p.installmentAmount.toFixed(2)}, ${p.remainingInstallments} installments left (RM ${p.remainingTotal.toFixed(2)} total remaining)`
-}).join('\n') : '- No BNPL plans'}
+SPENDING BY CATEGORY (vs 3-month average):
+${catSummaries.map((c) => {
+  const change = c.prior3moAvg > 0 ? Math.round(((c.spent - c.prior3moAvg) / c.prior3moAvg) * 100) : null
+  const overBudget = c.budget && c.spent > c.budget ? ` — OVER BUDGET by RM ${(c.spent - c.budget).toFixed(2)}` : ''
+  return `- ${c.name}: RM ${c.spent.toFixed(2)}${change !== null ? ` (${change > 0 ? '+' : ''}${change}% vs avg)` : ''}${overBudget}`
+}).join('\n') || '- No spending data'}
 
-CREDIT CARDS:
-${ccSummary.length > 0 ? ccSummary.map((c) => `- ${c.name}: outstanding RM ${(c.outstanding ?? 0).toFixed(2)}${c.creditLimit ? ` / RM ${c.creditLimit.toFixed(2)} limit (${c.utilisationPct}% utilised)` : ''}${c.latestStatementAmount ? `, latest statement RM ${c.latestStatementAmount.toFixed(2)}` : ''}${c.unpaidAmount && c.unpaidAmount > 0 ? `, RM ${c.unpaidAmount.toFixed(2)} unpaid` : ''}`).join('\n') : '- No credit cards configured'}
-Total CC outstanding: RM ${totalCcOutstanding.toFixed(2)}
+BILLS & COMMITMENTS (RM ${totalBillsCommitment.toFixed(2)}/month):
+${billsSummary.map((b) => `- ${b.name}: RM ${b.amount.toFixed(2)} — ${b.paid ? 'paid' : 'UNPAID'}`).join('\n') || '- None'}
+Unpaid this month: RM ${totalBillsUnpaid.toFixed(2)}
+
+BNPL (RM ${totalMonthlyBnpl.toFixed(2)} due this month):
+${bnplSummary.filter(p => p.activeThisMonth).map((p) => `- ${p.merchant}: RM ${p.installmentAmount.toFixed(2)} (${p.installmentNumber}/${p.totalInstallments}, RM ${p.remainingTotal.toFixed(2)} left)`).join('\n') || '- None active'}
+
+CREDIT CARDS (total outstanding: RM ${totalCcOutstanding.toFixed(2)}):
+${ccSummary.map((c) => `- ${c.name}: RM ${(c.outstanding ?? 0).toFixed(2)} outstanding${c.utilisationPct !== null ? `, ${c.utilisationPct}% utilised` : ''}${c.unpaidAmount && c.unpaidAmount > 0 ? `, RM ${c.unpaidAmount.toFixed(2)} unpaid on last statement` : ''}`).join('\n') || '- No credit cards'}
+
+INVESTMENTS (total: RM ${totalInvestmentValue.toFixed(2)}, ${investmentGainPct !== null ? `${Number(investmentGainPct) >= 0 ? '+' : ''}${investmentGainPct}% overall return` : 'no cost basis set'}):
+${investmentSummary.join('\n') || '- No investments recorded'}
+Investment-to-salary ratio: ${salaryAmount > 0 ? (totalInvestmentValue / salaryAmount).toFixed(1) : 'n/a'}x monthly salary
 
 SAVINGS GOALS:
-${savingsSummary.length > 0 ? savingsSummary.map((g) => `- ${g.name}: RM ${g.current.toFixed(2)}${g.target ? ` / RM ${g.target.toFixed(2)} (${g.pct}%)` : ' (no target set)'}`).join('\n') : '- No savings goals configured'}
+${savingsSummary.map((g) => `- ${g.name}: RM ${g.current.toFixed(2)}${g.target ? ` / RM ${g.target.toFixed(2)} (${g.pct}%)` : ''}`).join('\n') || '- None set'}
 
-TOTAL FIXED MONTHLY OUTFLOWS: RM ${(totalBillsCommitment + totalMonthlyBnpl).toFixed(2)} (bills + BNPL installments)
+Identify the single most important area needing attention or praise (e.g. "Overspending", "Savings Rate", "CC Debt", "Investment Growth", "Budget Discipline").
 
-Return ONLY a JSON object with this structure, no other text. Do not use any emojis anywhere in the response:
+Return ONLY a JSON object, no other text, no emojis:
 {
-  "summary": "2-3 sentence overview of the month",
+  "focus": {
+    "area": "one short label, e.g. Savings Rate",
+    "verdict": "one word: Critical | Warning | Good | Excellent",
+    "detail": "one sentence explaining why this is the focus"
+  },
+  "summary": "2 sentences max. Lead with the most important number or finding.",
   "bullets": [
-    { "tone": "warn|ok|tip", "text": "bullet point" }
+    { "tone": "warn|ok|tip", "text": "specific, number-backed insight" }
   ],
   "plan": [
     { "step": 1, "title": "action title", "amount": 0, "status": "Done|Recommended|Optional", "note": "brief note" }
   ]
 }
 
-Provide 3-4 bullets and 3-4 plan steps. Be specific with amounts and percentages. No emojis.`
+Rules: 3-5 bullets, 3-4 plan steps. Every bullet must reference a specific RM amount or %. Investments must appear in at least one bullet or plan step. No generic advice like "track your spending".`
 
   let message
   try {

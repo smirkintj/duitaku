@@ -17,7 +17,14 @@ interface PlanStep {
   note: string
 }
 
+interface Focus {
+  area: string
+  verdict: 'Critical' | 'Warning' | 'Good' | 'Excellent'
+  detail: string
+}
+
 interface CoachData {
+  focus?: Focus
   summary: string
   bullets: Bullet[]
   plan: PlanStep[]
@@ -39,6 +46,13 @@ const STATUS_STYLES: Record<string, { color: string; label: string }> = {
   Done: { color: '#a3e635', label: '✓ DONE' },
   Recommended: { color: '#a3e635', label: 'RECOMMENDED' },
   Optional: { color: '#5b5b59', label: 'OPTIONAL' },
+}
+
+const VERDICT_STYLES: Record<string, { color: string; bg: string; border: string }> = {
+  Critical: { color: '#ef4444', bg: 'rgba(239,68,68,0.06)', border: 'rgba(239,68,68,0.2)' },
+  Warning:  { color: '#fbbf24', bg: 'rgba(251,191,36,0.06)', border: 'rgba(251,191,36,0.2)' },
+  Good:     { color: '#a3e635', bg: 'rgba(163,230,53,0.06)', border: 'rgba(163,230,53,0.2)' },
+  Excellent:{ color: '#a3e635', bg: 'rgba(163,230,53,0.06)', border: 'rgba(163,230,53,0.2)' },
 }
 
 function fmtDate(iso: string) {
@@ -222,7 +236,7 @@ export default function AICoachCard({ month }: AICoachCardProps) {
             <div style={{ height: '100%', background: 'linear-gradient(90deg, #a3e635 0%, #a3e63560 50%, #a3e635 100%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s ease infinite', borderRadius: 2 }} />
           </div>
           <div style={{ fontFamily: '"Geist", -apple-system, sans-serif', fontSize: 12, color: '#5b5b59', textAlign: 'center', maxWidth: 280 }}>
-            Reading spending patterns, bills, savings goals and CC data for {month}
+            Reading spending, bills, investments and CC data for {month}
           </div>
           <style>{`
             @keyframes spin { to { transform: rotate(360deg); } }
@@ -245,13 +259,30 @@ export default function AICoachCard({ month }: AICoachCardProps) {
 
       {/* Body */}
       {coach && !generating && (
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {/* Focus banner */}
+          {coach.focus && (() => {
+            const vs = VERDICT_STYLES[coach.focus.verdict] ?? VERDICT_STYLES['Good']
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, border: `1px solid ${vs.border}`, background: vs.bg, marginBottom: 20 }}>
+                <div style={{ flexShrink: 0 }}>
+                  <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: vs.color, letterSpacing: '0.08em', display: 'block', marginBottom: 2 }}>FOCUS AREA</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: vs.color, fontFamily: '"Geist", -apple-system, sans-serif' }}>{coach.focus.area}</span>
+                </div>
+                <div style={{ width: 1, height: 32, background: vs.border, flexShrink: 0 }} />
+                <div>
+                  <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: vs.color, letterSpacing: '0.08em', display: 'block', marginBottom: 2 }}>{coach.focus.verdict.toUpperCase()}</span>
+                  <span style={{ fontSize: 12.5, color: '#a0a09e', fontFamily: '"Geist", -apple-system, sans-serif', lineHeight: 1.4 }}>{coach.focus.detail}</span>
+                </div>
+              </div>
+            )
+          })()}
+
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: '1.1fr 1fr',
             gap: 24,
-            position: 'relative',
-            zIndex: 1,
           }}
         >
           {/* Left */}
@@ -379,6 +410,7 @@ export default function AICoachCard({ month }: AICoachCardProps) {
               })}
             </div>
           </div>
+        </div>
         </div>
       )}
     </div>
