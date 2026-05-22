@@ -1,6 +1,6 @@
 import React from 'react'
 import { db } from '@/db'
-import { financeTransactions, financeCategories, financeSalary, financeBills, financeBnpl, financeBillPayments, userSettings, financeAccounts } from '@/db/schema'
+import { financeTransactions, financeCategories, financeSalary, financeBills, financeBnpl, financeBillPayments, userSettings, financeAccounts, financeInvestments, financeLoans } from '@/db/schema'
 import { and, gte, lte, desc, eq } from 'drizzle-orm'
 import SidebarClient from '@/components/finance/SidebarClient'
 import HeroRemaining from '@/components/finance/HeroRemaining'
@@ -13,6 +13,7 @@ import DashboardClient from '@/components/finance/DashboardClient'
 import SalarySetupCard from '@/components/finance/SalarySetupCard'
 import NetWorthWidget from '@/components/finance/NetWorthWidget'
 import RecurringSuggestions from '@/components/finance/RecurringSuggestions'
+import SetupNudge, { type NudgeItem } from '@/components/finance/SetupNudge'
 import { computeRedFlags } from '@/lib/red-flags'
 import { getPayCycle, getCurrentBaseMonth, getDayInCycle, prevCycleMonth } from '@/lib/pay-cycle'
 
@@ -62,7 +63,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const dayOfMonth = isCurrentCycle ? getDayInCycle(now, startDate, daysIn) : daysIn
 
   // Fetch in parallel
-  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth, ccAccountRows] = await Promise.all([
+  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth, ccAccountRows, investmentRows, loanRows] = await Promise.all([
     db
       .select()
       .from(financeSalary)
@@ -88,6 +89,8 @@ export default async function HomePage({ searchParams }: PageProps) {
     db.select().from(financeBnpl).where(eq(financeBnpl.isActive, true)),
     db.select().from(financeBillPayments).where(eq(financeBillPayments.month, baseMonth)),
     db.select({ id: financeAccounts.id }).from(financeAccounts).where(eq(financeAccounts.type, 'credit')),
+    db.select({ id: financeInvestments.id }).from(financeInvestments).limit(1),
+    db.select({ id: financeLoans.id }).from(financeLoans).where(eq(financeLoans.isActive, true)).limit(1),
   ])
 
   const salaryDefault = salaryRows[0]?.amount ?? 0
@@ -301,6 +304,53 @@ export default async function HomePage({ searchParams }: PageProps) {
   }))
   const flags = computeRedFlags(salary, remaining, flagInput, expenseTxs, merchantAnomalies, projectedRemaining, daysIn - dayOfMonth)
 
+  // Setup nudges — check what the user hasn't configured yet
+  const allNudges: NudgeItem[] = [
+    {
+      id: 'transactions',
+      title: "No spending recorded this month",
+      body: "Import your bank or CC statement, or add transactions manually to track where your money goes.",
+      href: '/import',
+      actionLabel: 'Import statement',
+    },
+    {
+      id: 'bills',
+      title: "No recurring bills set up",
+      body: "Add your fixed commitments — rent, utilities, subscriptions — so your buffer reflects the full picture.",
+      href: '/bills',
+      actionLabel: 'Add bills',
+    },
+    {
+      id: 'cc',
+      title: "No credit card linked",
+      body: "Link a CC account so charges are tracked separately from cash spending and your buffer stays accurate.",
+      href: '/settings',
+      actionLabel: 'Add card',
+    },
+    {
+      id: 'investments',
+      title: "Investments not tracked",
+      body: "Add your EPF, ASB, unit trusts or crypto so your net worth includes everything you own.",
+      href: '/investments',
+      actionLabel: 'Add investments',
+    },
+    {
+      id: 'loans',
+      title: "No loans recorded",
+      body: "Track your car loan, mortgage or personal financing to see your true net worth and payoff timeline.",
+      href: '/loans',
+      actionLabel: 'Add loan',
+    },
+  ]
+  const activeNudges = allNudges.filter(n => {
+    if (n.id === 'transactions') return monthTxs.filter(t => t.type === 'expense').length === 0
+    if (n.id === 'bills') return activeBills.length === 0
+    if (n.id === 'cc') return ccAccountRows.length === 0
+    if (n.id === 'investments') return investmentRows.length === 0
+    if (n.id === 'loans') return loanRows.length === 0
+    return false
+  })
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <SidebarClient />
@@ -324,6 +374,8 @@ export default async function HomePage({ searchParams }: PageProps) {
             flex: 1,
           }}
         >
+          <SetupNudge nudges={activeNudges} total={allNudges.length} />
+
           {flags.length > 0 && <RedFlagClient flags={flags} />}
 
           <RecurringSuggestions />
