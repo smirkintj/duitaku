@@ -171,7 +171,7 @@ type SortMode = 'spend' | 'delta' | 'az'
 
 const SORT_PILLS: { key: SortMode; label: string }[] = [
   { key: 'spend', label: 'By spend' },
-  { key: 'delta', label: 'By delta' },
+  { key: 'delta', label: 'Over budget' },
   { key: 'az', label: 'A-Z' },
 ]
 
