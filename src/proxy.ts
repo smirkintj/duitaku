@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 
-const SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET ?? 'duitaku-dev-secret-change-in-production'
-)
 const COOKIE = 'duitaku_session'
-
 const PUBLIC_PATHS = ['/login', '/register', '/api/auth/login', '/api/auth/register']
 
 export async function proxy(request: NextRequest) {
@@ -15,13 +11,19 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
+  const secret = process.env.AUTH_SECRET
+  if (!secret) {
+    // Refuse all requests if secret is misconfigured — fail closed, not open
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
   const token = request.cookies.get(COOKIE)?.value
   if (!token) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
   try {
-    await jwtVerify(token, SECRET)
+    await jwtVerify(token, new TextEncoder().encode(secret))
     return NextResponse.next()
   } catch {
     const res = NextResponse.redirect(new URL('/login', request.url))

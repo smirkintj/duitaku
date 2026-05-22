@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, real, boolean, uuid } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, integer, real, boolean, uuid, primaryKey } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 export const users = pgTable('users', {
@@ -182,10 +182,11 @@ export const financeLoans = pgTable('finance_loans', {
 })
 
 export const financeApiKeys = pgTable('finance_api_keys', {
-  key: text('key').primaryKey(),
-  value: text('value').notNull(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  key: text('key').notNull(),
+  value: text('value').notNull(), // encrypted at application layer
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (t) => [primaryKey({ columns: [t.userId, t.key] })])
 
 // Relations
 export const financeAccountsRelations = relations(financeAccounts, ({ many }) => ({

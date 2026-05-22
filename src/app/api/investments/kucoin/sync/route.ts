@@ -3,6 +3,7 @@ import { db } from '@/db'
 import { financeInvestments, financeApiKeys } from '@/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { decrypt } from '@/lib/encrypt'
 
 function kucoinSign(secret: string, timestamp: string, method: string, path: string, body = '') {
   return crypto.createHmac('sha256', secret).update(timestamp + method + path + body).digest('base64')
@@ -34,8 +35,8 @@ export async function POST(request: Request) {
   if (!userId) return unauthorized()
 
   try {
-    const allKeys = await db.select().from(financeApiKeys)
-    const keyMap = Object.fromEntries(allKeys.map(r => [r.key, r.value]))
+    const rows = await db.select().from(financeApiKeys).where(eq(financeApiKeys.userId, userId))
+    const keyMap = Object.fromEntries(rows.map(r => [r.key, decrypt(r.value)]))
     const apiKey = keyMap['kucoin_api_key']
     const apiSecret = keyMap['kucoin_api_secret']
     const apiPassphrase = keyMap['kucoin_api_passphrase']
