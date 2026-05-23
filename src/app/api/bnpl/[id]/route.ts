@@ -49,7 +49,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.isActive !== undefined) updates.isActive = body.isActive
   if (body.merchant !== undefined) updates.merchant = body.merchant
   if (body.provider !== undefined) updates.provider = body.provider
-  if (body.totalInstallments !== undefined) updates.totalInstallments = body.totalInstallments
+  if (body.totalInstallments !== undefined) {
+    const n = Math.round(Number(body.totalInstallments))
+    if (!Number.isInteger(n) || n < 1 || n > 1200) return validationError('totalInstallments must be a positive integer (max 1200)')
+    updates.totalInstallments = n
+  }
   if (body.startMonth !== undefined) updates.startMonth = body.startMonth
   if ('notes' in body) updates.notes = body.notes
   const [updated] = await db.update(financeBnpl).set(updates).where(and(eq(financeBnpl.id, id), eq(financeBnpl.userId, userId))).returning()
