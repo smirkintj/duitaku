@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeTransactions } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount } from '@/lib/validate'
 
 interface ImportTx {
   date: string
@@ -23,6 +24,9 @@ export async function POST(request: Request) {
   let skipped = 0
 
   for (const tx of transactions) {
+    let amount: number
+    try { amount = validateAmount(tx.amount) } catch { skipped++; continue }
+
     // Check if importHash already exists for this user
     const existing = await db
       .select({ id: financeTransactions.id })
@@ -39,7 +43,7 @@ export async function POST(request: Request) {
       userId,
       accountId: null,
       categoryId: tx.categoryId ?? null,
-      amount: tx.amount,
+      amount,
       currency: 'MYR',
       date: tx.date,
       merchant: tx.merchant,

@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeCcStatements, financeAccounts } from '@/db/schema'
 import { and, eq, desc } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 async function verifyAccountOwnership(accountId: string, userId: string): Promise<boolean> {
   const [account] = await db.select({ id: financeAccounts.id }).from(financeAccounts)
@@ -37,12 +38,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     notes?: string
   }
 
+  let statementAmount: number, minimumPayment: number, paidAmount: number
+  try {
+    statementAmount = validateAmount(body.statementAmount, 'statementAmount')
+    minimumPayment = validateAmount(body.minimumPayment ?? 0, 'minimumPayment')
+    paidAmount = validateAmount(body.paidAmount ?? 0, 'paidAmount')
+  } catch (e) { return validationError((e as Error).message) }
+
   const [created] = await db.insert(financeCcStatements).values({
     accountId: id,
     month: body.month,
-    statementAmount: body.statementAmount,
-    minimumPayment: body.minimumPayment ?? 0,
-    paidAmount: body.paidAmount ?? 0,
+    statementAmount,
+    minimumPayment,
+    paidAmount,
     notes: body.notes ?? null,
   }).returning()
 
@@ -62,12 +70,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     paidAt?: string | null
   }
 
+  let paidAmount: number | undefined
+  if (body.paidAmount !== undefined) {
+    try { paidAmount = validateAmount(body.paidAmount, 'paidAmount') } catch (e) { return validationError((e as Error).message) }
+  }
+
   const [updated] = await db.update(financeCcStatements)
     .set({
-      ...(body.paidAmount !== undefined && { paidAmount: body.paidAmount }),
+      ...(paidAmount !== undefined && { paidAmount }),
       ...(body.paidAt !== undefined && { paidAt: body.paidAt ? new Date(body.paidAt) : null }),
     })
-    .where(eq(financeCcStatements.id, body.statementId))
+    .where(and(eq(financeCcStatements.id, body.statementId), eq(financeCcStatements.accountId, id)))
     .returning()
 
   return Response.json(updated)

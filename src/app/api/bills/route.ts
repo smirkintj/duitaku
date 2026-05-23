@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeBills, financeBillPayments } from '@/db/schema'
 import { and, eq, asc } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 export async function GET(request: Request) {
   const userId = await getUserIdFromRequest(request)
@@ -33,10 +34,13 @@ export async function POST(request: Request) {
   if (!userId) return unauthorized()
 
   const body = await request.json() as { name: string; amount: number; dueDay?: number; categoryId?: string; icon?: string; paymentMethod?: string; accountId?: string }
+  let amount: number
+  try { amount = validateAmount(body.amount) } catch (e) { return validationError((e as Error).message) }
+
   const [created] = await db.insert(financeBills).values({
     userId,
     name: body.name,
-    amount: body.amount,
+    amount,
     dueDay: body.dueDay ?? 1,
     categoryId: body.categoryId ?? null,
     icon: body.icon ?? 'bolt',
