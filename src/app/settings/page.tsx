@@ -45,6 +45,27 @@ export default function SettingsPage() {
   const [parseSuccess, setParseSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'deleting'>('idle')
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function handleDeleteAccount() {
+    setDeleteStep('deleting')
+    setDeleteError(null)
+    const res = await fetch('/api/auth/account', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: deletePassword }),
+    })
+    if (res.ok) {
+      window.location.href = '/login'
+    } else {
+      const data = await res.json()
+      setDeleteError(data.error ?? 'Deletion failed')
+      setDeleteStep('confirm')
+    }
+  }
+
   useEffect(() => {
     Promise.all([
       fetch('/api/salary').then(r => r.json()),
@@ -294,6 +315,56 @@ export default function SettingsPage() {
                   Current cycle: <span style={{ color: '#a3e635', fontWeight: 600 }}>day {payDay} of each month</span>. Dashboard navigates by pay cycle instead of calendar month.
                 </span>
               </div>
+            )}
+          </div>
+          {/* Danger Zone */}
+          <div style={{ marginTop: 40, background: '#111', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 14, padding: '24px 28px' }}>
+            <div style={{ ...S.label, color: '#ef4444', marginBottom: 6 }}>DANGER ZONE</div>
+            <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans, marginBottom: 20, lineHeight: 1.6 }}>
+              Permanently deletes your account and all associated data — transactions, accounts, investments, salary history, everything. This cannot be undone.
+            </div>
+            {deleteStep === 'idle' && (
+              <button
+                onClick={() => setDeleteStep('confirm')}
+                style={{ fontSize: 13, padding: '8px 18px', background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, color: '#ef4444', cursor: 'pointer', ...S.sans, fontWeight: 600 }}
+              >
+                Delete my account
+              </button>
+            )}
+            {deleteStep === 'confirm' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 13, color: '#ef4444', ...S.sans, fontWeight: 600 }}>
+                  Enter your password to confirm deletion:
+                </div>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={e => { setDeletePassword(e.target.value); setDeleteError(null) }}
+                  placeholder="Your password"
+                  autoFocus
+                  style={{ width: 260, padding: '8px 12px', background: '#0d0d0d', border: `1px solid ${deleteError ? '#ef4444' : '#2a2a2a'}`, borderRadius: 8, color: '#e5e5e5', fontSize: 14, ...S.sans, outline: 'none' }}
+                  onKeyDown={e => e.key === 'Enter' && deletePassword && handleDeleteAccount()}
+                />
+                {deleteError && <div style={{ fontSize: 12, color: '#ef4444', ...S.sans }}>{deleteError}</div>}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    onClick={handleDeleteAccount}
+                    disabled={!deletePassword}
+                    style={{ fontSize: 13, padding: '8px 18px', background: '#ef4444', border: 'none', borderRadius: 8, color: '#fff', cursor: deletePassword ? 'pointer' : 'not-allowed', opacity: deletePassword ? 1 : 0.5, ...S.sans, fontWeight: 600 }}
+                  >
+                    Yes, delete everything
+                  </button>
+                  <button
+                    onClick={() => { setDeleteStep('idle'); setDeletePassword(''); setDeleteError(null) }}
+                    style={{ fontSize: 13, padding: '8px 18px', background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 8, color: '#7a7a78', cursor: 'pointer', ...S.sans }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {deleteStep === 'deleting' && (
+              <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans }}>Deleting account…</div>
             )}
           </div>
         </div>
