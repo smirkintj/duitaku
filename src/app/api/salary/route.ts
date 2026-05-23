@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeSalary } from '@/db/schema'
 import { desc, eq } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 export async function GET(request: Request) {
   const userId = await getUserIdFromRequest(request)
@@ -34,12 +35,15 @@ export async function POST(request: Request) {
     effectiveFrom: string
   }
 
+  let amount: number
+  try { amount = validateAmount(body.amount) } catch (e) { return validationError((e as Error).message) }
+
   const [created] = await db
     .insert(financeSalary)
     .values({
       userId,
-      amount: body.amount,
-      grossAmount: body.grossAmount ?? null,
+      amount,
+      grossAmount: body.grossAmount != null ? Math.max(0, Number(body.grossAmount)) : null,
       epfEmployee: body.epfEmployee ?? 0,
       epfEmployer: body.epfEmployer ?? 0,
       socso: body.socso ?? 0,

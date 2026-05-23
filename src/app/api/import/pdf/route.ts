@@ -81,6 +81,13 @@ export async function POST(request: Request) {
       return Response.json({ error: 'No file provided' }, { status: 400 })
     }
 
+    if (file.size > 25 * 1024 * 1024) {
+      return Response.json({ error: 'File too large (max 25 MB)' }, { status: 413 })
+    }
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+      return Response.json({ error: 'Only PDF files are accepted' }, { status: 415 })
+    }
+
     const password = (formData.get('password') as string) || undefined
 
     const arrayBuffer = await file.arrayBuffer()

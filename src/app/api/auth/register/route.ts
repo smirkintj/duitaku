@@ -3,8 +3,14 @@ import { users } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { createSession } from '@/lib/auth'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
+  if (!checkRateLimit(`register:${ip}`, 5, 60 * 60 * 1000)) {
+    return Response.json({ error: 'Too many registration attempts. Try again in 1 hour.' }, { status: 429 })
+  }
+
   const { email, password, name } = await request.json() as { email: string; password: string; name?: string }
 
   if (!email || !password) {

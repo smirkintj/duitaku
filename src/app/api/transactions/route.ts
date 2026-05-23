@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeTransactions } from '@/db/schema'
 import { and, gte, lte, desc, eq } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 export async function GET(request: Request) {
   const userId = await getUserIdFromRequest(request)
@@ -50,13 +51,16 @@ export async function POST(request: Request) {
     isRecurring?: boolean
   }
 
+  let amount: number
+  try { amount = validateAmount(body.amount) } catch (e) { return validationError((e as Error).message) }
+
   const [created] = await db
     .insert(financeTransactions)
     .values({
       userId,
       accountId: body.accountId ?? null,
       categoryId: body.categoryId ?? null,
-      amount: body.amount,
+      amount,
       currency: body.currency ?? 'MYR',
       date: body.date,
       note: body.note ?? null,

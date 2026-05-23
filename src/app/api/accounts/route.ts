@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeAccounts, financeCcStatements } from '@/db/schema'
 import { asc, eq, inArray } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 export async function GET(request: Request) {
   const userId = await getUserIdFromRequest(request)
@@ -44,14 +45,21 @@ export async function POST(request: Request) {
     lastFour?: string
   }
 
+  let initialBalance: number, creditLimit: number | null = null, currentOutstanding: number | null = null
+  try {
+    initialBalance = validateAmount(body.initialBalance ?? 0, 'initialBalance')
+    if (body.creditLimit != null) creditLimit = validateAmount(body.creditLimit, 'creditLimit')
+    if (body.currentOutstanding != null) currentOutstanding = validateAmount(body.currentOutstanding, 'currentOutstanding')
+  } catch (e) { return validationError((e as Error).message) }
+
   const [created] = await db.insert(financeAccounts).values({
     userId,
     name: body.name,
     type: body.type ?? 'bank',
     currency: body.currency ?? 'MYR',
-    initialBalance: body.initialBalance ?? 0,
-    creditLimit: body.creditLimit ?? null,
-    currentOutstanding: body.currentOutstanding ?? null,
+    initialBalance,
+    creditLimit,
+    currentOutstanding,
     statementDueDay: body.statementDueDay ?? null,
     statementDay: body.statementDay ?? null,
     lastFour: body.lastFour ?? null,
