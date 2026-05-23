@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeInvestments } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const userId = await getUserIdFromRequest(request)
@@ -19,12 +20,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     ticker?: string
     notes?: string
   }
+  let costBasis: number | undefined, currentValue: number | undefined
+  try {
+    if (body.costBasis !== undefined) costBasis = validateAmount(body.costBasis, 'costBasis')
+    if (body.currentValue !== undefined) currentValue = validateAmount(body.currentValue, 'currentValue')
+  } catch (e) { return validationError((e as Error).message) }
+
   const [updated] = await db.update(financeInvestments).set({
     ...(body.name !== undefined && { name: body.name }),
     ...(body.type !== undefined && { type: body.type }),
     ...(body.provider !== undefined && { provider: body.provider }),
-    ...(body.costBasis !== undefined && { costBasis: body.costBasis }),
-    ...(body.currentValue !== undefined && { currentValue: body.currentValue }),
+    ...(costBasis !== undefined && { costBasis }),
+    ...(currentValue !== undefined && { currentValue }),
     ...(body.currency !== undefined && { currency: body.currency }),
     ...(body.units !== undefined && { units: body.units }),
     ...(body.ticker !== undefined && { ticker: body.ticker }),

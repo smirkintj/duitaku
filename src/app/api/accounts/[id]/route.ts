@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeAccounts } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const userId = await getUserIdFromRequest(request)
@@ -18,15 +19,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     initialBalance?: number
   }
 
+  let creditLimit: number | undefined, currentOutstanding: number | undefined, initialBalance: number | undefined
+  try {
+    if (body.creditLimit !== undefined) creditLimit = validateAmount(body.creditLimit, 'creditLimit')
+    if (body.currentOutstanding !== undefined) currentOutstanding = validateAmount(body.currentOutstanding, 'currentOutstanding')
+    if (body.initialBalance !== undefined) initialBalance = validateAmount(body.initialBalance, 'initialBalance')
+  } catch (e) { return validationError((e as Error).message) }
+
   const [updated] = await db.update(financeAccounts)
     .set({
       ...(body.name !== undefined && { name: body.name }),
-      ...(body.creditLimit !== undefined && { creditLimit: body.creditLimit }),
-      ...(body.currentOutstanding !== undefined && { currentOutstanding: body.currentOutstanding }),
+      ...(creditLimit !== undefined && { creditLimit }),
+      ...(currentOutstanding !== undefined && { currentOutstanding }),
       ...(body.statementDueDay !== undefined && { statementDueDay: body.statementDueDay }),
       ...(body.statementDay !== undefined && { statementDay: body.statementDay }),
       ...(body.lastFour !== undefined && { lastFour: body.lastFour }),
-      ...(body.initialBalance !== undefined && { initialBalance: body.initialBalance }),
+      ...(initialBalance !== undefined && { initialBalance }),
     })
     .where(and(eq(financeAccounts.id, id), eq(financeAccounts.userId, userId)))
     .returning()

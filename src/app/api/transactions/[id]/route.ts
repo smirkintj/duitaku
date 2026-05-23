@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeTransactions } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 export async function PATCH(
   request: Request,
@@ -21,10 +22,15 @@ export async function PATCH(
     isRecurring?: boolean
   }
 
+  let validatedAmount: number | undefined
+  if (body.amount !== undefined) {
+    try { validatedAmount = validateAmount(body.amount) } catch (e) { return validationError((e as Error).message) }
+  }
+
   const [updated] = await db
     .update(financeTransactions)
     .set({
-      ...(body.amount !== undefined && { amount: body.amount }),
+      ...(validatedAmount !== undefined && { amount: validatedAmount }),
       ...(body.date !== undefined && { date: body.date }),
       ...(body.type !== undefined && { type: body.type }),
       ...(body.merchant !== undefined && { merchant: body.merchant }),

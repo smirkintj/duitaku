@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeLoans } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const userId = await getUserIdFromRequest(request)
@@ -18,11 +19,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     isActive?: boolean
     billId?: string | null
   }
+  let outstandingBalance: number | undefined, monthlyInstallment: number | undefined
+  try {
+    if (body.outstandingBalance !== undefined) outstandingBalance = validateAmount(body.outstandingBalance, 'outstandingBalance')
+    if (body.monthlyInstallment !== undefined) monthlyInstallment = validateAmount(body.monthlyInstallment, 'monthlyInstallment')
+  } catch (e) { return validationError((e as Error).message) }
+
   const [updated] = await db.update(financeLoans).set({
     ...(body.name !== undefined && { name: body.name }),
     ...(body.lender !== undefined && { lender: body.lender }),
-    ...(body.outstandingBalance !== undefined && { outstandingBalance: body.outstandingBalance }),
-    ...(body.monthlyInstallment !== undefined && { monthlyInstallment: body.monthlyInstallment }),
+    ...(outstandingBalance !== undefined && { outstandingBalance }),
+    ...(monthlyInstallment !== undefined && { monthlyInstallment }),
     ...(body.interestRate !== undefined && { interestRate: body.interestRate }),
     ...(body.notes !== undefined && { notes: body.notes }),
     ...(body.isActive !== undefined && { isActive: body.isActive }),

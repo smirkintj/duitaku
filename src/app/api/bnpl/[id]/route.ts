@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeBnpl, financeTransactions } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const userId = await getUserIdFromRequest(request)
@@ -40,12 +41,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const updates: Record<string, unknown> = {}
+  try {
+    if (body.totalAmount !== undefined) updates.totalAmount = validateAmount(body.totalAmount, 'totalAmount')
+    if (body.installmentAmount !== undefined) updates.installmentAmount = validateAmount(body.installmentAmount, 'installmentAmount')
+  } catch (e) { return validationError((e as Error).message) }
   if (body.paidInstallments !== undefined) updates.paidInstallments = body.paidInstallments
   if (body.isActive !== undefined) updates.isActive = body.isActive
   if (body.merchant !== undefined) updates.merchant = body.merchant
   if (body.provider !== undefined) updates.provider = body.provider
-  if (body.totalAmount !== undefined) updates.totalAmount = body.totalAmount
-  if (body.installmentAmount !== undefined) updates.installmentAmount = body.installmentAmount
   if (body.totalInstallments !== undefined) updates.totalInstallments = body.totalInstallments
   if (body.startMonth !== undefined) updates.startMonth = body.startMonth
   if ('notes' in body) updates.notes = body.notes

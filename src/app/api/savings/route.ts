@@ -2,6 +2,7 @@ import { db } from '@/db'
 import { financeSavingsGoals } from '@/db/schema'
 import { asc, eq } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { validateAmount, validationError } from '@/lib/validate'
 
 export async function GET(request: Request) {
   const userId = await getUserIdFromRequest(request)
@@ -18,10 +19,14 @@ export async function POST(request: Request) {
   if (!userId) return unauthorized()
 
   const body = await request.json() as { name: string; targetAmount?: number; color?: string; notes?: string }
+  let targetAmount: number | null = null
+  if (body.targetAmount != null) {
+    try { targetAmount = validateAmount(body.targetAmount, 'targetAmount') } catch (e) { return validationError((e as Error).message) }
+  }
   const [created] = await db.insert(financeSavingsGoals).values({
     userId,
     name: body.name,
-    targetAmount: body.targetAmount ?? null,
+    targetAmount,
     color: body.color ?? '#a3e635',
     notes: body.notes ?? null,
   }).returning()
