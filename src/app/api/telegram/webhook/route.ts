@@ -101,15 +101,45 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
     .filter(t => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0)
 
-  // Call Claude to parse intent
+  // Keyword pre-matching for common phrases (fast path, no AI needed)
   let parsed: ParsedIntent = { intent: 'unknown' }
+  const lower = text.toLowerCase()
 
-  try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      system: `You are a parser for a personal finance app. Extract the intent from the user's message.
+  const balanceKeywords = ['how much left', 'balance', 'berapa', 'remaining', 'how much do i have', 'check balance', 'baki']
+  const billKeywords = ['paid ', 'bayar ', 'dah bayar']
+  const expenseKeywords = ['spent ', 'spend ', 'beli ', 'bought ', 'used rm', 'spend rm']
+  const incomeKeywords = ['received ', 'got paid', 'income ', 'masuk rm', 'dapat ']
+
+  if (balanceKeywords.some(k => lower.includes(k))) {
+    parsed = { intent: 'check_balance' }
+  } else if (billKeywords.some(k => lower.startsWith(k) || lower.includes(k))) {
+    // Try to match a bill name from the text directly before hitting Claude
+    const matchedBill = bills.find(b => lower.includes(b.name.toLowerCase()))
+    if (matchedBill) {
+      parsed = { intent: 'mark_bill_paid', billId: matchedBill.id, billName: matchedBill.name }
+    }
+  } else if (expenseKeywords.some(k => lower.includes(k))) {
+    // Simple regex: extract amount like "RM45" or "rm 45"
+    const amtMatch = text.match(/rm\s*(\d+(?:\.\d+)?)/i)
+    if (amtMatch) {
+      const merchant = text.replace(/rm\s*\d+(?:\.\d+)?/i, '').replace(/spent?|spend|beli|bought|used/i, '').trim() || 'Unknown'
+      parsed = { intent: 'add_expense', amount: parseFloat(amtMatch[1]), merchant }
+    }
+  } else if (incomeKeywords.some(k => lower.includes(k))) {
+    const amtMatch = text.match(/rm\s*(\d+(?:\.\d+)?)/i)
+    if (amtMatch) {
+      parsed = { intent: 'add_income', amount: parseFloat(amtMatch[1]), note: text }
+    }
+  }
+
+  // If keyword matching didn't resolve, call Claude
+  if (parsed.intent === 'unknown') {
+    try {
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 256,
+        system: `You are a parser for a personal finance app. Extract the intent from the user's message.
 Return ONLY valid JSON, no other text.
 
 Available bills: ${JSON.stringify(bills.map(b => ({ id: b.id, name: b.name, amount: b.amount })))}
@@ -120,15 +150,16 @@ Return one of these shapes:
 {"intent":"add_income","amount":number,"note":"string"}
 {"intent":"check_balance","_":""}
 {"intent":"unknown","_":""}`,
-      messages: [{ role: 'user', content: text }],
-    })
+        messages: [{ role: 'user', content: text }],
+      })
 
-    const content = response.content[0]
-    if (content.type === 'text') {
-      parsed = JSON.parse(content.text) as ParsedIntent
+      const content = response.content[0]
+      if (content.type === 'text') {
+        parsed = JSON.parse(content.text) as ParsedIntent
+      }
+    } catch {
+      // Fall through to unknown intent
     }
-  } catch {
-    // Fall through to unknown intent
   }
 
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
