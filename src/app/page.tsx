@@ -1,6 +1,6 @@
 import React from 'react'
 import { db } from '@/db'
-import { financeTransactions, financeCategories, financeSalary, financeBills, financeBnpl, financeBillPayments, userSettings, financeAccounts, financeInvestments, financeLoans } from '@/db/schema'
+import { financeTransactions, financeCategories, financeSalary, financeBills, financeBnpl, financeBillPayments, userSettings, financeAccounts, financeInvestments, financeLoans, financeSavingsGoals } from '@/db/schema'
 import { and, gte, lte, desc, eq, count } from 'drizzle-orm'
 import SidebarClient from '@/components/finance/SidebarClient'
 import HeroRemaining from '@/components/finance/HeroRemaining'
@@ -21,6 +21,53 @@ import { redirect } from 'next/navigation'
 
 interface PageProps {
   searchParams: Promise<{ m?: string }>
+}
+
+interface SavingsGoalSummary {
+  id: string
+  name: string
+  targetAmount: number | null
+  currentAmount: number
+  color: string | null
+}
+
+function UpcomingGoals({ goals }: { goals: SavingsGoalSummary[] }) {
+  const mono = { fontFamily: '"JetBrains Mono", monospace' } as React.CSSProperties
+  const sans = { fontFamily: '"Geist", -apple-system, sans-serif' } as React.CSSProperties
+  const labelStyle = { fontSize: 10, ...mono, color: '#5b5b59', letterSpacing: '0.08em' } as React.CSSProperties
+  function fmt(n: number) { return n.toLocaleString('en-MY', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }
+  return (
+    <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '18px 20px' }}>
+      <div style={{ ...labelStyle, marginBottom: 14 }}>SAVINGS GOALS</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {goals.slice(0, 4).map(g => {
+          const pct = g.targetAmount ? Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100)) : 0
+          const color = g.color ?? '#a3e635'
+          const remaining = (g.targetAmount ?? 0) - g.currentAmount
+          return (
+            <div key={g.id}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: '#f5f5f4', ...sans }}>{g.name}</span>
+                <span style={{ fontSize: 11, ...mono, color: '#5b5b59' }}>{pct}%</span>
+              </div>
+              <div style={{ height: 4, borderRadius: 2, background: '#1a1a1a', overflow: 'hidden', marginBottom: 5 }}>
+                <div style={{ height: '100%', width: `${pct}%`, borderRadius: 2, background: color }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 11, color: '#5b5b59', ...sans }}>RM {fmt(g.currentAmount)} saved</span>
+                {remaining > 0 && <span style={{ fontSize: 11, color: '#5b5b59', ...sans }}>RM {fmt(remaining)} to go</span>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {goals.length > 4 && (
+        <a href="/savings" style={{ display: 'block', marginTop: 12, fontSize: 11, ...mono, color: '#5b5b59', textDecoration: 'none' }}>
+          +{goals.length - 4} more goals
+        </a>
+      )}
+    </div>
+  )
 }
 
 function DbSetupCard({ message }: { message: string }) {
@@ -68,7 +115,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const dayOfMonth = isCurrentCycle ? getDayInCycle(now, startDate, daysIn) : daysIn
 
   // Fetch in parallel
-  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth, ccAccountRows, investmentRows, loanRows, txCountRows, accountCountRows] = await Promise.all([
+  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth, ccAccountRows, investmentRows, loanRows, txCountRows, accountCountRows, savingsGoals] = await Promise.all([
     db
       .select()
       .from(financeSalary)
@@ -98,6 +145,7 @@ export default async function HomePage({ searchParams }: PageProps) {
     db.select({ id: financeLoans.id }).from(financeLoans).where(and(eq(financeLoans.userId, userId), eq(financeLoans.isActive, true))).limit(1),
     db.select({ total: count() }).from(financeTransactions).where(eq(financeTransactions.userId, userId)),
     db.select({ total: count() }).from(financeAccounts).where(eq(financeAccounts.userId, userId)),
+    db.select({ id: financeSavingsGoals.id, name: financeSavingsGoals.name, targetAmount: financeSavingsGoals.targetAmount, currentAmount: financeSavingsGoals.currentAmount, color: financeSavingsGoals.color }).from(financeSavingsGoals).where(eq(financeSavingsGoals.userId, userId)),
   ])
 
   const salaryDefault = salaryRows[0]?.amount ?? 0
@@ -393,6 +441,9 @@ export default async function HomePage({ searchParams }: PageProps) {
             flexDirection: 'column',
             gap: 16,
             flex: 1,
+            maxWidth: 1500,
+            width: '100%',
+            boxSizing: 'border-box',
           }}
         >
           <SetupNudge nudges={activeNudges} total={allNudges.length} />
@@ -403,13 +454,7 @@ export default async function HomePage({ searchParams }: PageProps) {
 
           <NetWorthWidget month={monthStr} />
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1.65fr) minmax(0, 1fr)',
-              gap: 16,
-            }}
-          >
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(0, 1fr)', gap: 16 }}>
             <HeroRemaining
               remaining={remaining}
               salary={salary}
@@ -440,15 +485,14 @@ export default async function HomePage({ searchParams }: PageProps) {
             />
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1.65fr) minmax(0, 1fr)',
-              gap: 16,
-            }}
-          >
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(0, 1fr)', gap: 16 }}>
             <CategoriesBlock categories={categoryStats} month={monthStr} />
-            <RecentTransactions transactions={recentTxs} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <RecentTransactions transactions={recentTxs} />
+              {savingsGoals.filter(g => g.targetAmount && g.targetAmount > 0).length > 0 && (
+                <UpcomingGoals goals={savingsGoals.filter(g => g.targetAmount && g.targetAmount > 0)} />
+              )}
+            </div>
           </div>
 
           <AICoachCard month={monthStr} />

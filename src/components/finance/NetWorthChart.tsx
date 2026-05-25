@@ -21,21 +21,29 @@ function monthAbbr(yyyyMM: string): string {
   return MONTH_ABBR[m - 1] ?? yyyyMM
 }
 
-const CHART_W = 800
 const CHART_H = 200
 const PAD_LEFT = 8
 const PAD_RIGHT = 8
 const PAD_TOP = 12
-const PAD_BOTTOM = 28 // space for x-axis labels
-
-const PLOT_W = CHART_W - PAD_LEFT - PAD_RIGHT
-const PLOT_H = CHART_H - PAD_TOP - PAD_BOTTOM
+const PAD_BOTTOM = 28
 
 export default function NetWorthChart() {
   const [data, setData] = useState<HistoryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
-  const svgRef = useRef<SVGSVGElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [chartWidth, setChartWidth] = useState(800)
+
+  // Track actual container width so text never stretches
+  useEffect(() => {
+    const update = () => {
+      if (containerRef.current) setChartWidth(containerRef.current.clientWidth)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    if (containerRef.current) ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => {
     fetch('/api/net-worth/history')
@@ -43,6 +51,9 @@ export default function NetWorthChart() {
       .then((d: HistoryData) => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
+
+  const PLOT_W = chartWidth - PAD_LEFT - PAD_RIGHT
+  const PLOT_H = CHART_H - PAD_TOP - PAD_BOTTOM
 
   if (loading) {
     return (
@@ -54,22 +65,10 @@ export default function NetWorthChart() {
     )
   }
 
-  if (!data || data.months.length === 0) {
-    return (
-      <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 16px', textAlign: 'center' }}>
-        <span style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.06em', lineHeight: 1.6 }}>
-          Add accounts and investments to see your net worth trend.
-        </span>
-      </div>
-    )
-  }
-
-  const months = data.months
-  const n = months.length
-
-  // Check if all zeros
+  const months = data?.months ?? []
   const allZero = months.every(m => m.assets === 0 && m.liabilities === 0 && m.netWorth === 0)
-  if (allZero) {
+
+  if (months.length === 0 || allZero) {
     return (
       <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 16px', textAlign: 'center' }}>
         <span style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.06em', lineHeight: 1.6 }}>
@@ -79,7 +78,7 @@ export default function NetWorthChart() {
     )
   }
 
-  // Compute min/max across all three series
+  const n = months.length
   const allValues = months.flatMap(m => [m.assets, m.liabilities, m.netWorth])
   const rawMin = Math.min(...allValues)
   const rawMax = Math.max(...allValues)
@@ -102,139 +101,90 @@ export default function NetWorthChart() {
   }
 
   const assetsPoints = toPoints(m => m.assets)
-  const liabPoints = toPoints(m => m.liabilities)
-  const nwPoints = toPoints(m => m.netWorth)
+  const liabPoints  = toPoints(m => m.liabilities)
+  const nwPoints    = toPoints(m => m.netWorth)
 
-  // Hover handler
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
-    const svg = svgRef.current
-    if (!svg) return
+    const svg = e.currentTarget
     const rect = svg.getBoundingClientRect()
-    // Map client X to viewBox X
-    const scaleX = CHART_W / rect.width
-    const vbX = (e.clientX - rect.left) * scaleX
-    // Find nearest index
-    const idx = Math.round(((vbX - PAD_LEFT) / PLOT_W) * (n - 1))
+    const relX = e.clientX - rect.left
+    const idx = Math.round(((relX - PAD_LEFT) / PLOT_W) * (n - 1))
     setHoverIdx(Math.max(0, Math.min(n - 1, idx)))
   }
 
-  function handleMouseLeave() {
-    setHoverIdx(null)
-  }
-
-  // Tooltip positioning
-  let tooltipX = 0
-  let tooltipY = 0
+  let tooltipX = 0, tooltipY = 0
   let hovered: MonthPoint | null = null
+  const TOOLTIP_W = 158
 
   if (hoverIdx !== null) {
     hovered = months[hoverIdx]
     tooltipX = xPos(hoverIdx)
-    // Position tooltip above the highest point at this index
     const highestY = Math.min(yPos(hovered.assets), yPos(hovered.liabilities), yPos(hovered.netWorth))
-    tooltipY = Math.max(PAD_TOP, highestY - 72)
+    tooltipY = Math.max(PAD_TOP, highestY - 76)
   }
 
-  // Adjust tooltip X so it doesn't go off the right edge
-  const TOOLTIP_W = 148
-  const tooltipXAdj = tooltipX + TOOLTIP_W > CHART_W - PAD_RIGHT
+  const tooltipXAdj = hoverIdx !== null && tooltipX + TOOLTIP_W > chartWidth - PAD_RIGHT
     ? tooltipX - TOOLTIP_W - 8
     : tooltipX + 8
 
+  // Show every label if ≤6 months, every other if ≤12, every third if more
+  function showLabel(i: number): boolean {
+    if (n <= 6) return true
+    if (n <= 12) return i % 2 === 0
+    return i % 3 === 0
+  }
+
   return (
-    <div style={{ width: '100%' }}>
+    <div ref={containerRef} style={{ width: '100%' }}>
       <svg
-        ref={svgRef}
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-        preserveAspectRatio="none"
-        style={{ width: '100%', height: 200, display: 'block', cursor: 'crosshair' }}
+        viewBox={`0 0 ${chartWidth} ${CHART_H}`}
+        style={{ width: '100%', height: CHART_H, display: 'block', cursor: 'crosshair' }}
         onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
+        onMouseLeave={() => setHoverIdx(null)}
       >
-        {/* Lines */}
-        <polyline
-          points={assetsPoints}
-          fill="none"
-          stroke="#a3e635"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-        <polyline
-          points={liabPoints}
-          fill="none"
-          stroke="#ef4444"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-        <polyline
-          points={nwPoints}
-          fill="none"
-          stroke="#60a5fa"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
+        {/* Grid lines */}
+        {[0.25, 0.5, 0.75].map(f => (
+          <line
+            key={f}
+            x1={PAD_LEFT} y1={PAD_TOP + f * PLOT_H}
+            x2={chartWidth - PAD_RIGHT} y2={PAD_TOP + f * PLOT_H}
+            stroke="#1a1a1a" strokeWidth="1"
+          />
+        ))}
 
-        {/* X axis labels */}
-        {months.map((m, i) => {
-          // Show every other label for 12 months
-          if (n >= 10 && i % 2 !== 0) return null
-          return (
-            <text
-              key={m.month}
-              x={xPos(i)}
-              y={CHART_H - 6}
-              textAnchor="middle"
-              fill="#5b5b59"
-              fontSize="9"
-              fontFamily='"JetBrains Mono", monospace'
-            >
-              {monthAbbr(m.month)}
-            </text>
-          )
-        })}
+        {/* Series lines */}
+        <polyline points={assetsPoints} fill="none" stroke="#a3e635" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={liabPoints}   fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={nwPoints}     fill="none" stroke="#60a5fa" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
 
-        {/* Hover: vertical line + circles */}
+        {/* X-axis labels */}
+        {months.map((m, i) => showLabel(i) && (
+          <text
+            key={m.month}
+            x={xPos(i)}
+            y={CHART_H - 6}
+            textAnchor="middle"
+            fill="#3a3a3a"
+            fontSize="9"
+            fontFamily='"JetBrains Mono", monospace'
+          >
+            {monthAbbr(m.month)}
+          </text>
+        ))}
+
+        {/* Hover */}
         {hoverIdx !== null && hovered && (
           <>
-            <line
-              x1={xPos(hoverIdx)}
-              y1={PAD_TOP}
-              x2={xPos(hoverIdx)}
-              y2={PAD_TOP + PLOT_H}
-              stroke="#2a2a2a"
-              strokeWidth="1"
-            />
-            <circle cx={xPos(hoverIdx)} cy={yPos(hovered.assets)} r="4" fill="#a3e635" />
-            <circle cx={xPos(hoverIdx)} cy={yPos(hovered.liabilities)} r="4" fill="#ef4444" />
-            <circle cx={xPos(hoverIdx)} cy={yPos(hovered.netWorth)} r="4" fill="#60a5fa" />
+            <line x1={xPos(hoverIdx)} y1={PAD_TOP} x2={xPos(hoverIdx)} y2={PAD_TOP + PLOT_H} stroke="#2a2a2a" strokeWidth="1" />
+            <circle cx={xPos(hoverIdx)} cy={yPos(hovered.assets)}      r="3.5" fill="#a3e635" />
+            <circle cx={xPos(hoverIdx)} cy={yPos(hovered.liabilities)} r="3.5" fill="#ef4444" />
+            <circle cx={xPos(hoverIdx)} cy={yPos(hovered.netWorth)}    r="3.5" fill="#60a5fa" />
 
-            {/* Tooltip box */}
-            <rect
-              x={tooltipXAdj}
-              y={tooltipY}
-              width={TOOLTIP_W}
-              height={72}
-              rx="4"
-              ry="4"
-              fill="#1a1a1a"
-              stroke="#2a2a2a"
-              strokeWidth="1"
-            />
-            <text x={tooltipXAdj + 8} y={tooltipY + 14} fill="#5b5b59" fontSize="8" fontFamily='"JetBrains Mono", monospace'>
-              {hovered.month}
-            </text>
-            <text x={tooltipXAdj + 8} y={tooltipY + 29} fill="#a3e635" fontSize="9" fontFamily='"JetBrains Mono", monospace'>
-              Assets  RM {formatRM(hovered.assets)}
-            </text>
-            <text x={tooltipXAdj + 8} y={tooltipY + 43} fill="#ef4444" fontSize="9" fontFamily='"JetBrains Mono", monospace'>
-              Liab    RM {formatRM(hovered.liabilities)}
-            </text>
-            <text x={tooltipXAdj + 8} y={tooltipY + 57} fill="#60a5fa" fontSize="9" fontFamily='"JetBrains Mono", monospace'>
-              Net     RM {formatRM(hovered.netWorth)}
-            </text>
+            <rect x={tooltipXAdj} y={tooltipY} width={TOOLTIP_W} height={76} rx="4" fill="#1a1a1a" stroke="#2a2a2a" strokeWidth="1" />
+            <text x={tooltipXAdj + 8} y={tooltipY + 14} fill="#5b5b59" fontSize="8" fontFamily='"JetBrains Mono", monospace'>{hovered.month}</text>
+            <text x={tooltipXAdj + 8} y={tooltipY + 30} fill="#a3e635" fontSize="9" fontFamily='"JetBrains Mono", monospace'>Assets  RM {formatRM(hovered.assets)}</text>
+            <text x={tooltipXAdj + 8} y={tooltipY + 46} fill="#ef4444" fontSize="9" fontFamily='"JetBrains Mono", monospace'>Liab    RM {formatRM(hovered.liabilities)}</text>
+            <text x={tooltipXAdj + 8} y={tooltipY + 62} fill="#60a5fa" fontSize="9" fontFamily='"JetBrains Mono", monospace'>Net     RM {formatRM(hovered.netWorth)}</text>
           </>
         )}
       </svg>
