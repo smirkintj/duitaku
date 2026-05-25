@@ -15,6 +15,10 @@ import {
 } from '@/db/schema'
 import { and, eq, gte, lte, desc, sql } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
+
+function toTitleCase(s: string): string {
+  return s.replace(/\b\w/g, c => c.toUpperCase()).replace(/\B\w/g, c => c.toLowerCase())
+}
 import { fetchAssetInsight, investmentTypesToAssets, resolveAsset, signalEmoji } from '@/lib/market-data'
 
 interface TelegramChat { id: number }
@@ -138,7 +142,7 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
       const amount = parseFloat(amtMatch[1].replace(',', '.'))
       // "using Ryt" or "at Ryt" → merchant
       const usingMatch = text.match(/\b(?:using|at|via|through)\s+([^\s]+(?:\s+[^\s]+)?)/i)
-      const merchant = usingMatch ? usingMatch[1].trim() : 'Unknown'
+      const merchant = usingMatch ? toTitleCase(usingMatch[1].trim()) : 'Unknown'
       // Everything left after removing verb, amount, merchant clause = note
       const note = text
         .replace(/rm\s*\d+(?:[.,]\d+)?/i, '')
@@ -355,7 +359,7 @@ ${insight.signalReason}
 
   } else if (parsed.intent === 'add_expense') {
     const amount = parsed.amount ?? 0
-    const merchant = parsed.merchant ?? 'Unknown'
+    const merchant = parsed.merchant ? toTitleCase(parsed.merchant) : 'Unknown'
     await db.insert(financeTransactions).values({ userId, amount, currency: 'MYR', date: today, merchant, note: parsed.note ?? null, type: 'expense' })
     await sendMessage(chatId, `✅ Logged RM${fmt(amount)} spent at ${merchant}`)
 
