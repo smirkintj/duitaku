@@ -126,15 +126,26 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
   } else if (['paid ', 'bayar ', 'dah bayar'].some(k => lower.startsWith(k) || lower.includes(k))) {
     const matchedBill = bills.find(b => lower.includes(b.name.toLowerCase()))
     if (matchedBill) parsed = { intent: 'mark_bill_paid', billId: matchedBill.id, billName: matchedBill.name }
-  } else if (['spent ', 'spend ', 'beli ', 'bought ', 'used rm', 'spend rm'].some(k => lower.includes(k))) {
-    const amtMatch = text.match(/rm\s*(\d+(?:\.\d+)?)/i)
+  } else if (['spent ', 'spend ', 'beli ', 'bought '].some(k => lower.includes(k))) {
+    // Match "RM12.30" or bare "12.30"
+    const amtMatch = text.match(/rm\s*(\d+(?:\.\d+)?)/i) ?? text.match(/\b(\d+(?:[.,]\d+)?)\b/)
     if (amtMatch) {
-      const merchant = text.replace(/rm\s*\d+(?:\.\d+)?/i, '').replace(/spent?|spend|beli|bought|used/i, '').trim() || 'Unknown'
-      parsed = { intent: 'add_expense', amount: parseFloat(amtMatch[1]), merchant }
+      const amount = parseFloat(amtMatch[1].replace(',', '.'))
+      // "using Ryt" or "at Ryt" → merchant
+      const usingMatch = text.match(/\b(?:using|at|via|through)\s+([^\s]+(?:\s+[^\s]+)?)/i)
+      const merchant = usingMatch ? usingMatch[1].trim() : 'Unknown'
+      // Everything left after removing verb, amount, merchant clause = note
+      const note = text
+        .replace(/rm\s*\d+(?:[.,]\d+)?/i, '')
+        .replace(/\b\d+(?:[.,]\d+)?\b/, '')
+        .replace(/\b(?:using|at|via|through)\s+\S+/i, '')
+        .replace(/\bspent?\b|\bspend\b|\bbeli\b|\bbought\b/i, '')
+        .replace(/\s+/g, ' ').trim() || null
+      parsed = { intent: 'add_expense', amount, merchant, note }
     }
   } else if (['received ', 'got paid', 'income ', 'masuk rm', 'dapat '].some(k => lower.includes(k))) {
-    const amtMatch = text.match(/rm\s*(\d+(?:\.\d+)?)/i)
-    if (amtMatch) parsed = { intent: 'add_income', amount: parseFloat(amtMatch[1]), note: text }
+    const amtMatch = text.match(/rm\s*(\d+(?:\.\d+)?)/i) ?? text.match(/\b(\d+(?:[.,]\d+)?)\b/)
+    if (amtMatch) parsed = { intent: 'add_income', amount: parseFloat(amtMatch[1].replace(',', '.')), note: text }
   }
 
   // Claude fallback for anything unresolved
