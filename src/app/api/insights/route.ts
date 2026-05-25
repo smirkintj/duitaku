@@ -279,7 +279,7 @@ Rules: 3-5 bullets, 3-4 plan steps. Every bullet must reference a specific RM am
   try {
     message = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 2048,
       messages: [{ role: 'user', content: prompt }],
     })
   } catch (err) {
@@ -287,19 +287,21 @@ Rules: 3-5 bullets, 3-4 plan steps. Every bullet must reference a specific RM am
     return Response.json({ error: msg }, { status: 502 })
   }
 
-  const rawText = message.content[0].type === 'text' ? message.content[0].text : '{}'
-  // Strip any emoji characters the model might still include
+  if (message.stop_reason === 'max_tokens') {
+    return Response.json({ error: 'Response was too long — please try again.' }, { status: 500 })
+  }
+
+  const rawText = message.content[0].type === 'text' ? message.content[0].text : ''
   const responseText = rawText.replace(/[\u{1F300}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim()
 
   let data: CoachData
   try {
-    data = JSON.parse(responseText)
+    // Try direct parse first
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return Response.json({ error: 'No JSON in response' }, { status: 500 })
+    data = JSON.parse(jsonMatch[0]) as CoachData
   } catch {
-    const match = responseText.match(/\{[\s\S]*\}/)
-    if (!match) {
-      return Response.json({ error: 'Failed to parse response' }, { status: 500 })
-    }
-    data = JSON.parse(match[0])
+    return Response.json({ error: 'Could not parse AI response — please try again.' }, { status: 500 })
   }
 
   // Upsert: delete old row for this month/user then insert fresh
