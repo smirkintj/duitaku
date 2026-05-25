@@ -196,6 +196,19 @@ export const financeApiKeys = pgTable('finance_api_keys', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [primaryKey({ columns: [t.userId, t.key] })])
 
+export const telegramConnections = pgTable('telegram_connections', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  telegramChatId: text('telegram_chat_id').notNull().unique(),
+  linkedAt: timestamp('linked_at').defaultNow().notNull(),
+})
+
+export const telegramLinkCodes = pgTable('telegram_link_codes', {
+  code: text('code').primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
 // Relations
 export const financeAccountsRelations = relations(financeAccounts, ({ many }) => ({
   transactions: many(financeTransactions),

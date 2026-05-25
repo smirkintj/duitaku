@@ -49,6 +49,14 @@ export default function SettingsPage() {
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  // Telegram state
+  const [tgConnected, setTgConnected] = useState<boolean | null>(null)
+  const [tgChatId, setTgChatId] = useState<string | undefined>()
+  const [tgCode, setTgCode] = useState<string | null>(null)
+  const [tgCodeCopied, setTgCodeCopied] = useState(false)
+  const [tgGenerating, setTgGenerating] = useState(false)
+  const [tgDisconnecting, setTgDisconnecting] = useState(false)
+
   async function handleDeleteAccount() {
     setDeleteStep('deleting')
     setDeleteError(null)
@@ -63,6 +71,45 @@ export default function SettingsPage() {
       const data = await res.json()
       setDeleteError(data.error ?? 'Deletion failed')
       setDeleteStep('confirm')
+    }
+  }
+
+  useEffect(() => {
+    fetch('/api/telegram/status').then(r => r.json()).then((data: { connected: boolean; chatId?: string }) => {
+      setTgConnected(data.connected)
+      setTgChatId(data.chatId)
+    }).catch(() => setTgConnected(false))
+  }, [])
+
+  async function handleTgGenerate() {
+    setTgGenerating(true)
+    setTgCode(null)
+    try {
+      const res = await fetch('/api/telegram/link', { method: 'POST' })
+      const data = await res.json() as { code: string }
+      setTgCode(data.code)
+    } finally {
+      setTgGenerating(false)
+    }
+  }
+
+  async function handleTgDisconnect() {
+    setTgDisconnecting(true)
+    try {
+      await fetch('/api/telegram/link', { method: 'DELETE' })
+      setTgConnected(false)
+      setTgChatId(undefined)
+      setTgCode(null)
+    } finally {
+      setTgDisconnecting(false)
+    }
+  }
+
+  function handleTgCopy() {
+    if (tgCode) {
+      navigator.clipboard.writeText(`/start ${tgCode}`)
+      setTgCodeCopied(true)
+      setTimeout(() => setTgCodeCopied(false), 2000)
     }
   }
 
@@ -317,6 +364,129 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
+          {/* Connect Telegram */}
+          <div style={{ marginTop: 28, background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '24px 28px' }}>
+            <div style={{ ...S.label, marginBottom: 6 }}>CONNECT TELEGRAM</div>
+            {tgConnected === null ? (
+              <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans }}>Loading…</div>
+            ) : tgConnected ? (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                  <span style={{ fontSize: 14, color: '#a3e635', ...S.sans, fontWeight: 600 }}>✅ Telegram connected</span>
+                  {tgChatId && (
+                    <span style={{ fontSize: 12, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace' }}>chat {tgChatId}</span>
+                  )}
+                </div>
+                <button
+                  onClick={handleTgDisconnect}
+                  disabled={tgDisconnecting}
+                  style={{
+                    fontSize: 13,
+                    padding: '8px 18px',
+                    background: 'transparent',
+                    border: '1px solid #2a2a2a',
+                    borderRadius: 8,
+                    color: tgDisconnecting ? '#5b5b59' : '#7a7a78',
+                    cursor: tgDisconnecting ? 'not-allowed' : 'pointer',
+                    ...S.sans,
+                  }}
+                >
+                  {tgDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: '0 0 18px', lineHeight: 1.6 }}>
+                  Link your Telegram account to log transactions and check your balance by sending a message.
+                </p>
+                {!tgCode ? (
+                  <button
+                    onClick={handleTgGenerate}
+                    disabled={tgGenerating}
+                    style={{
+                      background: tgGenerating ? '#1a1a1a' : 'rgba(163,230,53,0.08)',
+                      color: tgGenerating ? '#3a3a3a' : '#a3e635',
+                      border: `1px solid ${tgGenerating ? '#222' : 'rgba(163,230,53,0.25)'}`,
+                      borderRadius: 8,
+                      padding: '9px 18px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: tgGenerating ? 'not-allowed' : 'pointer',
+                      ...S.sans,
+                    }}
+                  >
+                    {tgGenerating ? 'Generating…' : 'Generate link code'}
+                  </button>
+                ) : (
+                  <div>
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ ...S.label, marginBottom: 8 }}>YOUR LINK CODE</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{
+                          fontSize: 32,
+                          fontWeight: 700,
+                          fontFamily: '"JetBrains Mono", monospace',
+                          color: '#a3e635',
+                          letterSpacing: '0.15em',
+                          background: 'rgba(163,230,53,0.06)',
+                          border: '1px solid rgba(163,230,53,0.2)',
+                          borderRadius: 10,
+                          padding: '10px 18px',
+                          userSelect: 'all',
+                        }}>
+                          {tgCode}
+                        </span>
+                        <button
+                          onClick={handleTgCopy}
+                          style={{
+                            background: tgCodeCopied ? 'rgba(163,230,53,0.12)' : '#1a1a1a',
+                            color: tgCodeCopied ? '#a3e635' : '#7a7a78',
+                            border: `1px solid ${tgCodeCopied ? 'rgba(163,230,53,0.3)' : '#2a2a2a'}`,
+                            borderRadius: 8,
+                            padding: '8px 14px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            ...S.sans,
+                            transition: 'all 150ms',
+                          }}
+                        >
+                          {tgCodeCopied ? 'Copied!' : 'Copy command'}
+                        </button>
+                        <button
+                          onClick={handleTgGenerate}
+                          style={{
+                            background: 'transparent',
+                            color: '#5b5b59',
+                            border: '1px solid #222',
+                            borderRadius: 8,
+                            padding: '8px 14px',
+                            fontSize: 12,
+                            cursor: 'pointer',
+                            ...S.sans,
+                          }}
+                        >
+                          Regenerate
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ padding: '14px 16px', background: 'rgba(163,230,53,0.04)', border: '1px solid rgba(163,230,53,0.1)', borderRadius: 10 }}>
+                      <p style={{ fontSize: 13, color: '#7a7a78', ...S.sans, margin: '0 0 6px', lineHeight: 1.6 }}>
+                        Open Telegram and send this to <span style={{ color: '#a3e635', fontFamily: '"JetBrains Mono", monospace' }}>@your_duitaku_bot</span>:
+                      </p>
+                      <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 14, color: '#f5f5f4' }}>
+                        /start {tgCode}
+                      </span>
+                      <p style={{ fontSize: 11, color: '#5b5b59', ...S.sans, margin: '10px 0 0', lineHeight: 1.5 }}>
+                        Code expires in 15 minutes.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Danger Zone */}
           <div style={{ marginTop: 40, background: '#111', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 14, padding: '24px 28px' }}>
             <div style={{ ...S.label, color: '#ef4444', marginBottom: 6 }}>DANGER ZONE</div>

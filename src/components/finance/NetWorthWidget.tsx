@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { formatRM } from '@/lib/finance-utils'
+import NetWorthChart from './NetWorthChart'
 
 interface NetWorthData {
   assets: {
@@ -151,6 +152,12 @@ export default function NetWorthWidget({ month: _month }: NetWorthWidgetProps) {
           )}
         </div>
       )}
+
+      {/* 12-month trend chart */}
+      <div style={{ marginTop: 16, borderTop: '1px solid #1a1a1a', paddingTop: 16 }}>
+        <div style={{ ...S.label, marginBottom: 12 }}>12-MONTH TREND</div>
+        <NetWorthChart />
+      </div>
     </div>
   )
 }

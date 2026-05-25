@@ -5,6 +5,7 @@ const COOKIE = 'duitaku_session'
 const PUBLIC_PATHS = [
   '/login', '/register', '/forgot-password', '/reset-password', '/privacy',
   '/api/auth/login', '/api/auth/register', '/api/auth/forgot-password', '/api/auth/reset-password',
+  '/api/telegram/webhook',
 ]
 
 export async function middleware(request: NextRequest) {
