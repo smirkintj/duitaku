@@ -193,7 +193,8 @@ function SignalBadge({ signal }: { signal: AssetInsight['signal'] }) {
       padding: '2px 7px',
       fontWeight: 700,
     }}>
-      {signalEmoji(signal)} {signal.toUpperCase()}
+      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: c.text, marginRight: 5, verticalAlign: 'middle', marginTop: -1 }} />
+      {signal.toUpperCase()}
     </span>
   )
 }
@@ -286,7 +287,7 @@ function MarketPulseSection({ prefs, investments }: { prefs: InvestPrefs; invest
         )}
       </div>
       {loading ? (
-        <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>⏳ Loading market data…</div>
+        <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>Loading market data…</div>
       ) : insights.length === 0 ? (
         <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>No market data available for tracked types.</div>
       ) : (
@@ -387,7 +388,7 @@ function WatchlistSection({ prefs, onPrefsChange }: { prefs: InvestPrefs; onPref
         ))}
       </div>
       {loading ? (
-        <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>⏳ Loading watchlist data…</div>
+        <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>Loading watchlist data…</div>
       ) : insights.length === 0 ? (
         <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>No data available for watchlist tickers.</div>
       ) : (
@@ -544,7 +545,9 @@ function SetupWizard({
         {/* Step 3 — Done */}
         {step === 3 && (
           <div style={{ textAlign: 'center', padding: '16px 0' }}>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(163,230,53,0.1)', border: '1px solid rgba(163,230,53,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a3e635" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            </div>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#f5f5f4', ...S.sans, marginBottom: 8 }}>Your view is set up.</div>
             <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans, marginBottom: 8, lineHeight: 1.6 }}>
               Tracking <strong style={{ color: '#a3e635' }}>{checkedTypes.length}</strong> asset type{checkedTypes.length !== 1 ? 's' : ''}
@@ -817,7 +820,8 @@ export default function InvestmentsPage() {
               onClick={() => { setIsUpdateWizard(true); setShowWizard(true) }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', color: '#7a7a78', border: '1px solid #222', borderRadius: 9, padding: '0 14px', height: 36, cursor: 'pointer', fontSize: 13, fontWeight: 500, ...S.sans }}
             >
-              ⚙ Customise
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              Customise
             </button>
             <button
               onClick={() => setShowAdd(true)}
