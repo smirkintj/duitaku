@@ -237,10 +237,10 @@ function MarketPulseSection({ prefs, investments }: { prefs: InvestPrefs; invest
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const hasLiveTypes = prefs.trackedTypes.some(t => LIVE_TYPES.includes(t))
-  if (!prefs.showMarketPulse || !hasLiveTypes) return null
+  const active = prefs.showMarketPulse && hasLiveTypes
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
+    if (!active) return
     let cancelled = false
     async function fetch_() {
       setLoading(true)
@@ -276,7 +276,9 @@ function MarketPulseSection({ prefs, investments }: { prefs: InvestPrefs; invest
     fetch_()
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefs.trackedTypes, prefs.watchlist, investments])
+  }, [active, prefs.trackedTypes, prefs.watchlist, investments])
+
+  if (!active) return null
 
   return (
     <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '20px 24px' }}>
@@ -307,10 +309,10 @@ function WatchlistSection({ prefs, onPrefsChange }: { prefs: InvestPrefs; onPref
   const [addInput, setAddInput] = useState('')
   const [showAddInput, setShowAddInput] = useState(false)
 
-  if (!prefs.showWatchlist || prefs.watchlist.length === 0) return null
+  const active = prefs.showWatchlist && prefs.watchlist.length > 0
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
+    if (!active) return
     let cancelled = false
     async function fetch_() {
       setLoading(true)
@@ -330,7 +332,9 @@ function WatchlistSection({ prefs, onPrefsChange }: { prefs: InvestPrefs; onPref
     fetch_()
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefs.watchlist])
+  }, [active, prefs.watchlist])
+
+  if (!active) return null
 
   function addTicker() {
     const t = addInput.trim()
