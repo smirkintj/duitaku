@@ -60,8 +60,26 @@ export async function POST(request: Request) {
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-  const body = await request.json() as { month: string }
-  const { month } = body
+  const body = await request.json() as { month: string; force?: boolean }
+  const { month, force } = body
+
+  // 24-hour cooldown per user per month (unless force=true, reserved for admin)
+  if (!force) {
+    const existing = await db.select().from(financeAiInsights)
+      .where(and(eq(financeAiInsights.userId, userId), eq(financeAiInsights.month, month)))
+      .limit(1)
+    if (existing.length > 0) {
+      const ageHours = (Date.now() - existing[0].generatedAt.getTime()) / 3_600_000
+      if (ageHours < 24) {
+        return Response.json({
+          rateLimited: true,
+          retryAfterHours: Math.ceil(24 - ageHours),
+          stored: JSON.parse(existing[0].data) as CoachData,
+          generatedAt: existing[0].generatedAt,
+        })
+      }
+    }
+  }
 
   const { start, end } = monthRange(month)
 
@@ -260,8 +278,8 @@ Rules: 3-5 bullets, 3-4 plan steps. Every bullet must reference a specific RM am
   let message
   try {
     message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     })
   } catch (err) {

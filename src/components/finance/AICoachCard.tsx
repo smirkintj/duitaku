@@ -66,11 +66,13 @@ export default function AICoachCard({ month }: AICoachCardProps) {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
   const [noApiKey, setNoApiKey] = useState(false)
+  const [cooldownHours, setCooldownHours] = useState<number | null>(null)
 
   useEffect(() => {
     setCoach(null)
     setError('')
     setNoApiKey(false)
+    setCooldownHours(null)
     setLoading(true)
     fetch(`/api/insights?month=${month}`)
       .then((r) => r.json())
@@ -85,19 +87,22 @@ export default function AICoachCard({ month }: AICoachCardProps) {
     setGenerating(true)
     setError('')
     setNoApiKey(false)
+    setCooldownHours(null)
     try {
       const res = await fetch('/api/insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ month }),
       })
-      const data = await res.json() as CoachData & { error?: string; generatedAt?: string }
-      if (!res.ok) throw new Error(data.error ?? 'Request failed')
-      if (data.noApiKey) {
-        setNoApiKey(true)
-      } else {
-        setCoach(data)
+      const data = await res.json() as CoachData & { error?: string; noApiKey?: boolean; rateLimited?: boolean; retryAfterHours?: number; stored?: CoachData; generatedAt?: string }
+      if (data.noApiKey) { setNoApiKey(true); return }
+      if (data.rateLimited) {
+        setCooldownHours(data.retryAfterHours ?? 24)
+        if (data.stored) setCoach({ ...data.stored, generatedAt: data.generatedAt })
+        return
       }
+      if (!res.ok) throw new Error(data.error ?? 'Request failed')
+      setCoach(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate insights.')
     } finally {
@@ -184,6 +189,13 @@ export default function AICoachCard({ month }: AICoachCardProps) {
       {error && (
         <div style={{ color: '#ef4444', fontSize: 13, fontFamily: '"Geist", -apple-system, sans-serif', marginBottom: 16, position: 'relative', zIndex: 1 }}>
           {error}
+        </div>
+      )}
+
+      {/* Cooldown notice */}
+      {cooldownHours !== null && (
+        <div style={{ fontSize: 12, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.04em', marginBottom: 16, position: 'relative', zIndex: 1 }}>
+          INSIGHTS CACHED — NEXT REFRESH IN {cooldownHours}H
         </div>
       )}
 
