@@ -1,6 +1,6 @@
 import { db } from '@/db'
-import { financeAccounts, financeCcStatements } from '@/db/schema'
-import { asc, eq, inArray } from 'drizzle-orm'
+import { financeAccounts, financeCcStatements, financeTransactions } from '@/db/schema'
+import { asc, eq, inArray, and, sql } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 import { validateAmount, validationError } from '@/lib/validate'
 
@@ -18,13 +18,32 @@ export async function GET(request: Request) {
     ? await db.select().from(financeCcStatements).where(inArray(financeCcStatements.accountId, ccIds))
     : []
 
+  // Aggregate topup transactions for the current month
+  const month = new Date().toISOString().slice(0, 7) // YYYY-MM
+  const topupRows = await db.select({
+    accountId: financeTransactions.accountId,
+    total: sql<number>`coalesce(sum(${financeTransactions.amount}), 0)`,
+  }).from(financeTransactions)
+    .where(and(
+      eq(financeTransactions.userId, userId),
+      eq(financeTransactions.type, 'topup'),
+      sql`${financeTransactions.date} like ${month + '-%'}`,
+    ))
+    .groupBy(financeTransactions.accountId)
+
+  const topupMap = new Map<string, number>()
+  for (const row of topupRows) {
+    if (row.accountId) topupMap.set(row.accountId, Number(row.total))
+  }
+
   const result = accounts.map((account) => {
     const { userId: _, ...accountData } = account
-    if (account.type !== 'credit') return { ...accountData, latestStatement: null, statements: [] }
+    const monthlyTopup = topupMap.get(account.id) ?? 0
+    if (account.type !== 'credit') return { ...accountData, latestStatement: null, statements: [], monthlyTopup, monthlyAllocation: account.monthlyAllocation ?? null }
     const acctStmts = statements
       .filter((s) => s.accountId === account.id)
       .sort((a, b) => b.month.localeCompare(a.month))
-    return { ...accountData, latestStatement: acctStmts[0] ?? null, statements: acctStmts }
+    return { ...accountData, latestStatement: acctStmts[0] ?? null, statements: acctStmts, monthlyTopup, monthlyAllocation: account.monthlyAllocation ?? null }
   })
 
   return Response.json(result)

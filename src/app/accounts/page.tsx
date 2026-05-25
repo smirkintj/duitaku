@@ -17,6 +17,13 @@ interface Statement {
   notes: string | null
 }
 
+interface TopupTransaction {
+  id: string
+  date: string
+  amount: number
+  note: string | null
+}
+
 interface Account {
   id: string
   name: string
@@ -30,6 +37,8 @@ interface Account {
   lastFour: string | null
   latestStatement: Statement | null
   statements: Statement[]
+  monthlyAllocation: number | null
+  monthlyTopup: number
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -64,6 +73,176 @@ function utilisationColor(pct: number) {
   if (pct >= 80) return '#ef4444'
   if (pct >= 50) return '#fbbf24'
   return '#a3e635'
+}
+
+// ─── Monthly Allocation Bar ──────────────────────────────────────────────────
+
+function MonthlyAllocationBar({ account, onUpdated }: { account: Account; onUpdated: () => void }) {
+  const [showInput, setShowInput] = useState(false)
+  const [inputVal, setInputVal] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [topups, setTopups] = useState<TopupTransaction[]>([])
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+
+  const allocation = account.monthlyAllocation
+  const topped = account.monthlyTopup
+  const remaining = allocation != null ? allocation - topped : 0
+  const pct = allocation != null && allocation > 0 ? Math.min(100, (topped / allocation) * 100) : 0
+  const overBudget = allocation != null && topped > allocation
+  const barColor = overBudget ? '#f59e0b' : '#a3e635'
+
+  const now = new Date()
+  const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
+  const saveAllocation = async () => {
+    const val = parseFloat(inputVal)
+    if (isNaN(val) || val < 0) return
+    setSaving(true)
+    await fetch(`/api/accounts/${account.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ monthlyAllocation: val }),
+    })
+    setSaving(false)
+    setShowInput(false)
+    setInputVal('')
+    onUpdated()
+  }
+
+  const clearAllocation = async () => {
+    setSaving(true)
+    await fetch(`/api/accounts/${account.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ monthlyAllocation: null }),
+    })
+    setSaving(false)
+    onUpdated()
+  }
+
+  const loadHistory = async () => {
+    if (historyLoaded) return
+    const res = await fetch(`/api/transactions?accountId=${account.id}&type=topup&m=${monthStr}`)
+    const data = await res.json() as TopupTransaction[]
+    setTopups(data)
+    setHistoryLoaded(true)
+  }
+
+  const toggleHistory = async () => {
+    if (!showHistory) await loadHistory()
+    setShowHistory(h => !h)
+  }
+
+  const inputStyle: React.CSSProperties = {
+    background: '#0d0d0d',
+    border: '1px solid #333',
+    borderRadius: 6,
+    padding: '6px 10px',
+    fontSize: 13,
+    color: '#f5f5f4',
+    fontFamily: '"Geist", -apple-system, sans-serif',
+    outline: 'none',
+    width: 100,
+    colorScheme: 'dark',
+  }
+
+  return (
+    <div style={{ marginTop: 10, background: '#0f0f0f', border: '1px solid #1a1a1a', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {allocation != null ? (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.08em' }}>MONTHLY ALLOCATION</span>
+            <button
+              onClick={clearAllocation}
+              disabled={saving}
+              style={{ background: 'transparent', border: 'none', color: '#3a3a3a', cursor: 'pointer', fontSize: 11, fontFamily: '"Geist", -apple-system, sans-serif', padding: 0 }}
+            >
+              remove
+            </button>
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ height: 6, background: '#1a1a1a', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 3, transition: 'width 400ms ease' }} />
+          </div>
+
+          <div style={{ fontSize: 12, color: '#7a7a78', fontFamily: '"Geist", -apple-system, sans-serif' }}>
+            <span style={{ color: barColor, fontWeight: 600 }}>RM {fmt(topped)}</span>
+            {' '}topped up{' '}
+            <span style={{ color: '#3a3a3a' }}>·</span>
+            {' '}
+            <span style={{ color: overBudget ? '#f59e0b' : '#f5f5f4' }}>RM {fmt(Math.abs(remaining))} {overBudget ? 'over' : 'remaining'}</span>
+            {' '}of{' '}
+            <span style={{ color: '#5b5b59' }}>RM {fmt(allocation)}</span>
+          </div>
+
+          {/* Top-up history toggle */}
+          <button
+            onClick={toggleHistory}
+            style={{ background: 'transparent', border: 'none', color: '#5b5b59', cursor: 'pointer', fontSize: 11, fontFamily: '"Geist", -apple-system, sans-serif', textAlign: 'left', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d={showHistory ? 'M2 7l3-4 3 4' : 'M2 3l3 4 3-4'} stroke="#5b5b59" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {showHistory ? 'Hide' : 'View'} top-up history this month
+          </button>
+
+          {showHistory && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {topups.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#3a3a3a', fontFamily: '"Geist", -apple-system, sans-serif' }}>No top-ups this month.</div>
+              ) : (
+                topups.map(t => (
+                  <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #141414' }}>
+                    <span style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59' }}>{t.date}</span>
+                    <span style={{ fontSize: 13, fontFamily: '"Geist", -apple-system, sans-serif', color: '#a3e635', fontWeight: 600 }}>+RM {fmt(t.amount)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {!showInput ? (
+            <button
+              onClick={() => setShowInput(true)}
+              style={{ background: 'transparent', border: 'none', color: '#5b5b59', cursor: 'pointer', fontSize: 12, fontFamily: '"Geist", -apple-system, sans-serif', textAlign: 'left', padding: 0 }}
+            >
+              + Set monthly budget
+            </button>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: '#5b5b59', fontFamily: '"Geist", -apple-system, sans-serif' }}>RM</span>
+              <input
+                type="number"
+                value={inputVal}
+                onChange={e => setInputVal(e.target.value)}
+                placeholder="350"
+                autoFocus
+                style={inputStyle}
+                onKeyDown={e => { if (e.key === 'Enter') saveAllocation(); if (e.key === 'Escape') { setShowInput(false); setInputVal('') } }}
+              />
+              <button
+                onClick={saveAllocation}
+                disabled={saving || !inputVal}
+                style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, fontFamily: '"Geist", -apple-system, sans-serif', cursor: saving || !inputVal ? 'not-allowed' : 'pointer', opacity: saving || !inputVal ? 0.6 : 1 }}
+              >
+                {saving ? '...' : 'Save'}
+              </button>
+              <button
+                onClick={() => { setShowInput(false); setInputVal('') }}
+                style={{ background: 'transparent', border: 'none', color: '#5b5b59', cursor: 'pointer', padding: 0 }}
+              >
+                <Icon name="close" width={14} height={14} />
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
 }
 
 // ─── CC Card ─────────────────────────────────────────────────────────────────
@@ -211,32 +390,38 @@ function CreditCardVisual({ account }: { account: Account }) {
 
 // ─── Bank / Cash Card ────────────────────────────────────────────────────────
 
-function BankCard({ account }: { account: Account }) {
+function BankCard({ account, onUpdated }: { account: Account; onUpdated: () => void }) {
   const typeLabel = account.type === 'cash' ? 'CASH' : 'BANK ACCOUNT'
   const typeColor = account.type === 'cash' ? '#fbbf24' : '#a3e635'
 
   return (
-    <div
-      style={{
-        borderRadius: 14,
-        border: '1px solid #1a1a1a',
-        background: '#111',
-        padding: '20px 22px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}
-    >
-      <div>
-        <div style={{ fontSize: 9, ...S.mono, color: typeColor, letterSpacing: '0.1em', marginBottom: 6, opacity: 0.7 }}>{typeLabel}</div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>{account.name}</div>
-        <div style={{ fontSize: 12, color: '#5b5b59', ...S.sans, marginTop: 2 }}>{account.currency}</div>
-      </div>
-      <div style={{ textAlign: 'right' }}>
-        <div style={{ ...S.label, marginBottom: 4 }}>BALANCE</div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', ...S.sans, letterSpacing: '-0.02em' }}>
-          RM {fmt(account.initialBalance)}
+    <div>
+      <div
+        style={{
+          borderRadius: account.monthlyAllocation != null || true ? '14px 14px 0 0' : 14,
+          border: '1px solid #1a1a1a',
+          borderBottom: 'none',
+          background: '#111',
+          padding: '20px 22px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 9, ...S.mono, color: typeColor, letterSpacing: '0.1em', marginBottom: 6, opacity: 0.7 }}>{typeLabel}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>{account.name}</div>
+          <div style={{ fontSize: 12, color: '#5b5b59', ...S.sans, marginTop: 2 }}>{account.currency}</div>
         </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ ...S.label, marginBottom: 4 }}>BALANCE</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', ...S.sans, letterSpacing: '-0.02em' }}>
+            RM {fmt(account.initialBalance)}
+          </div>
+        </div>
+      </div>
+      <div style={{ border: '1px solid #1a1a1a', borderTop: '1px solid #141414', borderRadius: '0 0 14px 14px', background: '#0f0f0f', padding: '0 0 0 0' }}>
+        <MonthlyAllocationBar account={account} onUpdated={onUpdated} />
       </div>
     </div>
   )
@@ -623,7 +808,7 @@ export default function AccountsPage() {
                   <div style={{ ...S.label, marginBottom: 14 }}>BANK & CASH ({bankCashAccounts.length})</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {bankCashAccounts.map((account) => (
-                      <BankCard key={account.id} account={account} />
+                      <BankCard key={account.id} account={account} onUpdated={load} />
                     ))}
                   </div>
                 </div>

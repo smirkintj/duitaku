@@ -36,6 +36,7 @@ export const financeAccounts = pgTable('finance_accounts', {
   statementDueDay: integer('statement_due_day'),    // day of month payment is due (e.g. 15)
   statementDay: integer('statement_day'),           // day of month statement cuts (e.g. 1)
   lastFour: text('last_four'),                      // last 4 digits of card number
+  monthlyAllocation: real('monthly_allocation'),     // optional monthly top-up budget
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 

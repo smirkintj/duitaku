@@ -17,13 +17,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     statementDay?: number
     lastFour?: string
     initialBalance?: number
+    monthlyAllocation?: number | null
   }
 
-  let creditLimit: number | undefined, currentOutstanding: number | undefined, initialBalance: number | undefined
+  let creditLimit: number | undefined, currentOutstanding: number | undefined, initialBalance: number | undefined, monthlyAllocation: number | null | undefined
   try {
     if (body.creditLimit !== undefined) creditLimit = validateAmount(body.creditLimit, 'creditLimit')
     if (body.currentOutstanding !== undefined) currentOutstanding = validateAmount(body.currentOutstanding, 'currentOutstanding')
     if (body.initialBalance !== undefined) initialBalance = validateAmount(body.initialBalance, 'initialBalance')
+    if (body.monthlyAllocation !== undefined) {
+      monthlyAllocation = body.monthlyAllocation === null ? null : validateAmount(body.monthlyAllocation, 'monthlyAllocation')
+    }
   } catch (e) { return validationError((e as Error).message) }
 
   const [updated] = await db.update(financeAccounts)
@@ -35,6 +39,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.statementDay !== undefined && { statementDay: body.statementDay }),
       ...(body.lastFour !== undefined && { lastFour: body.lastFour }),
       ...(initialBalance !== undefined && { initialBalance }),
+      ...(monthlyAllocation !== undefined && { monthlyAllocation }),
     })
     .where(and(eq(financeAccounts.id, id), eq(financeAccounts.userId, userId)))
     .returning()

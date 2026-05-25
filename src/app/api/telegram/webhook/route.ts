@@ -13,7 +13,7 @@ import {
   financeInvestments,
   financeAccounts,
 } from '@/db/schema'
-import { and, eq, gte, lte, desc } from 'drizzle-orm'
+import { and, eq, gte, lte, desc, sql } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
 import { fetchAssetInsight, investmentTypesToAssets, resolveAsset, signalEmoji } from '@/lib/market-data'
 
@@ -24,13 +24,14 @@ interface TelegramUpdate { message?: TelegramMessage }
 interface ParsedIntent {
   intent: 'mark_bill_paid' | 'add_expense' | 'add_income' | 'check_balance' |
           'check_loans' | 'check_investments' | 'check_net_worth' |
-          'payment_history' | 'recent_transactions' | 'market_insights' | 'unknown'
+          'payment_history' | 'recent_transactions' | 'market_insights' | 'topup' | 'unknown'
   billId?: string
   billName?: string
   amount?: number
   merchant?: string
   note?: string | null
   query?: string  // for payment_history: what to look up
+  account_name?: string  // for topup intent
   _?: string
 }
 
@@ -150,6 +151,14 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
   } else if (['received ', 'got paid', 'income ', 'masuk rm', 'dapat '].some(k => lower.includes(k))) {
     const amtMatch = text.match(/rm\s*(\d+(?:\.\d+)?)/i) ?? text.match(/\b(\d+(?:[.,]\d+)?)\b/)
     if (amtMatch) parsed = { intent: 'add_income', amount: parseFloat(amtMatch[1].replace(',', '.')), note: text }
+  } else if (/\b(top.?up|topup|reload|tambah)\b/i.test(lower)) {
+    const amtMatch = text.match(/rm\s*(\d+(?:[.,]\d+)?)/i) ?? text.match(/(\d+(?:[.,]\d+)?)/)
+    const accountMatch = text.match(/\bto\s+(.+)/i)
+    if (amtMatch) {
+      const amount = parseFloat(amtMatch[1].replace(',', '.'))
+      const account_name = accountMatch ? accountMatch[1].trim() : undefined
+      parsed = { intent: 'topup', amount, account_name }
+    }
   }
 
   // Claude fallback for anything unresolved
@@ -174,6 +183,7 @@ Return one of:
 {"intent":"check_net_worth","_":""}
 {"intent":"payment_history","query":"bill or merchant name to look up"}
 {"intent":"recent_transactions","_":""}
+{"intent":"topup","amount":number,"account_name":"account name to top up"}
 {"intent":"unknown","_":""}`,
         messages: [{ role: 'user', content: text }],
       })
@@ -353,6 +363,59 @@ ${insight.signalReason}
     const amount = parsed.amount ?? 0
     await db.insert(financeTransactions).values({ userId, amount, currency: 'MYR', date: today, note: parsed.note ?? null, type: 'income' })
     await sendMessage(chatId, `✅ Logged RM${fmt(amount)} income`)
+
+  } else if (parsed.intent === 'topup') {
+    const amount = parsed.amount ?? 0
+    const accountNameQuery = (parsed.account_name ?? '').toLowerCase().trim()
+
+    // Fetch user's accounts
+    const userAccounts = await db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId))
+
+    // Fuzzy match by name
+    let matched = accountNameQuery
+      ? userAccounts.find(a => a.name.toLowerCase().includes(accountNameQuery) || accountNameQuery.includes(a.name.toLowerCase()))
+      : null
+
+    if (!matched) {
+      const names = userAccounts.map(a => `• ${a.name}`).join('\n')
+      await sendMessage(chatId, `Which account?\n${names || '(no accounts found)'}`)
+      return
+    }
+
+    // Create topup transaction
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId: matched.id,
+      amount,
+      currency: 'MYR',
+      date: today,
+      note: 'Top-up via Telegram',
+      type: 'topup',
+    })
+
+    // Sum topups this month for that account
+    const [topupRow] = await db.select({
+      total: sql<number>`coalesce(sum(${financeTransactions.amount}), 0)`,
+    }).from(financeTransactions)
+      .where(and(
+        eq(financeTransactions.userId, userId),
+        eq(financeTransactions.accountId, matched.id),
+        eq(financeTransactions.type, 'topup'),
+        sql`${financeTransactions.date} like ${monthStr + '-%'}`,
+      ))
+
+    const toppedUpTotal = Number(topupRow?.total ?? 0)
+
+    if (matched.monthlyAllocation) {
+      const remaining = matched.monthlyAllocation - toppedUpTotal
+      await sendMessage(chatId, `Added RM${fmt(amount)} to ${matched.name}.
+
+Monthly budget: RM${fmt(matched.monthlyAllocation)}
+Topped up: RM${fmt(toppedUpTotal)} this month
+Remaining: RM${fmt(remaining)}`)
+    } else {
+      await sendMessage(chatId, `Added RM${fmt(amount)} to ${matched.name}.`)
+    }
 
   } else {
     await sendMessage(chatId, `I didn't understand that. Try:
