@@ -438,22 +438,23 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div style={{ padding: '32px', maxWidth: 1100 }}>
-          {/* Salary saved banner */}
+        <div style={{ padding: '32px', maxWidth: 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
           {saved && (
-            <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(163,230,53,0.08)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 10, gridColumn: '1 / -1' }}>
+            <div style={{ padding: '12px 16px', background: 'rgba(163,230,53,0.08)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 10 }}>
               <span style={{ fontSize: 13, color: '#a3e635', ...S.sans, fontWeight: 500 }}>Salary updated successfully.</span>
             </div>
           )}
 
-          {/* 2-column grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
-
-            {/* ── LEFT: Salary ── */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Current salary summary */}
-              {!loading && current && (
-                <div style={{ ...cardStyle, display: 'flex', gap: 32 }}>
+          {/* ── ROW 1: Salary summary + Pay cycle (short cards side by side) ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            {/* Salary summary */}
+            <div style={cardStyle}>
+              <div style={{ ...S.label, marginBottom: 14 }}>SALARY</div>
+              {loading ? (
+                <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans }}>Loading…</div>
+              ) : current ? (
+                <div style={{ display: 'flex', gap: 32 }}>
                   <div>
                     <div style={{ ...S.label, marginBottom: 5 }}>NET TAKE-HOME</div>
                     <div style={{ fontSize: 26, fontWeight: 700, color: '#a3e635', ...S.sans, letterSpacing: '-0.02em' }}>
@@ -469,314 +470,315 @@ export default function SettingsPage() {
                     </div>
                   )}
                 </div>
+              ) : (
+                <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans }}>No salary set yet.</div>
               )}
-
-              {/* Salary form card */}
-              <div style={cardStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                  <span style={S.label}>UPDATE PAYSLIP</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {parseSuccess && (
-                      <span style={{ fontSize: 12, color: '#a3e635', ...S.sans }}>Payslip extracted — review and save</span>
-                    )}
-                    {parseError && (
-                      <span style={{ fontSize: 12, color: '#ef4444', ...S.sans }}>{parseError}</span>
-                    )}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".pdf"
-                      style={{ display: 'none' }}
-                      onChange={handlePayslipUpload}
-                    />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={parsing || loading}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 7,
-                        background: parsing ? '#1a1a1a' : 'rgba(163,230,53,0.08)',
-                        color: parsing ? '#3a3a3a' : '#a3e635',
-                        border: `1px solid ${parsing ? '#222' : 'rgba(163,230,53,0.25)'}`,
-                        borderRadius: 8,
-                        padding: '7px 13px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: parsing ? 'not-allowed' : 'pointer',
-                        ...S.sans,
-                        transition: 'all 150ms',
-                      }}
-                    >
-                      {parsing ? <SpinnerIcon /> : <UploadIcon />}
-                      {parsing ? 'Reading payslip…' : 'Upload payslip PDF'}
-                    </button>
-                  </div>
-                </div>
-
-                {loading ? (
-                  <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans }}>Loading…</div>
-                ) : (
-                  <SalaryForm
-                    defaults={defaults}
-                    fillKey={fillKey}
-                    showEffectiveFrom
-                    submitLabel={current ? 'Update Salary' : 'Set Salary'}
-                    onSubmit={handleSave}
-                  />
-                )}
-              </div>
-
-              <div style={{ padding: '12px 16px', background: 'rgba(163,230,53,0.04)', border: '1px solid rgba(163,230,53,0.1)', borderRadius: 10 }}>
-                <p style={{ fontSize: 12, color: '#5b5b59', ...S.sans, margin: 0, lineHeight: 1.6 }}>
-                  Salary history is preserved — each update adds a new entry. The most recent entry on or before the current month is used for budget calculations.
-                </p>
-              </div>
-
-              {/* Pay cycle */}
-              <div style={cardStyle}>
-                <div style={{ ...S.label, marginBottom: 6 }}>PAY CYCLE</div>
-                <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: '0 0 20px', lineHeight: 1.6 }}>
-                  Set the day your salary arrives. Budget cycles will run from this day each month — e.g. day 28 means 28 Nov → 27 Dec.
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <label style={S.label}>SALARY ARRIVES ON DAY</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={31}
-                      value={payDayInput}
-                      onChange={e => setPayDayInput(e.target.value)}
-                      style={{
-                        width: 80,
-                        background: '#0d0d0d',
-                        border: '1px solid #2a2a2a',
-                        borderRadius: 8,
-                        color: '#f5f5f4',
-                        fontSize: 15,
-                        fontWeight: 600,
-                        padding: '8px 12px',
-                        fontFamily: '"JetBrains Mono", monospace',
-                        outline: 'none',
-                      }}
-                    />
-                  </div>
-                  <button
-                    onClick={handlePayDaySave}
-                    style={{
-                      marginTop: 22,
-                      background: '#a3e635',
-                      color: '#0d0d0d',
-                      border: 'none',
-                      borderRadius: 8,
-                      padding: '9px 18px',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      ...S.sans,
-                    }}
-                  >
-                    Save
-                  </button>
-                  {payDaySaved && (
-                    <span style={{ marginTop: 22, fontSize: 13, color: '#a3e635', ...S.sans }}>Saved!</span>
-                  )}
-                </div>
-                {payDay > 1 && (
-                  <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(163,230,53,0.05)', border: '1px solid rgba(163,230,53,0.12)', borderRadius: 8 }}>
-                    <span style={{ fontSize: 12, color: '#7a7a78', ...S.sans }}>
-                      Current cycle: <span style={{ color: '#a3e635', fontWeight: 600 }}>day {payDay} of each month</span>. Dashboard navigates by pay cycle instead of calendar month.
-                    </span>
-                  </div>
-                )}
-              </div>
             </div>
 
-            {/* ── RIGHT: Accounts + Telegram ── */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <AccountsManager />
-
-              {/* Connect Telegram */}
-              <div style={cardStyle}>
-                <div style={{ ...S.label, marginBottom: 6 }}>CONNECT TELEGRAM</div>
-                {tgConnected === null ? (
-                  <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans }}>Loading…</div>
-                ) : tgConnected ? (
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                      <span style={{ fontSize: 14, color: '#a3e635', ...S.sans, fontWeight: 600 }}>✅ Telegram connected</span>
-                      {tgChatId && (
-                        <span style={{ fontSize: 12, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace' }}>chat {tgChatId}</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={handleTgDisconnect}
-                      disabled={tgDisconnecting}
-                      style={{
-                        fontSize: 13,
-                        padding: '8px 18px',
-                        background: 'transparent',
-                        border: '1px solid #2a2a2a',
-                        borderRadius: 8,
-                        color: tgDisconnecting ? '#5b5b59' : '#7a7a78',
-                        cursor: tgDisconnecting ? 'not-allowed' : 'pointer',
-                        ...S.sans,
-                      }}
-                    >
-                      {tgDisconnecting ? 'Disconnecting…' : 'Disconnect'}
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: '0 0 18px', lineHeight: 1.6 }}>
-                      Link your Telegram account to log transactions and check your balance by sending a message.
-                    </p>
-                    {!tgCode ? (
-                      <button
-                        onClick={handleTgGenerate}
-                        disabled={tgGenerating}
-                        style={{
-                          background: tgGenerating ? '#1a1a1a' : 'rgba(163,230,53,0.08)',
-                          color: tgGenerating ? '#3a3a3a' : '#a3e635',
-                          border: `1px solid ${tgGenerating ? '#222' : 'rgba(163,230,53,0.25)'}`,
-                          borderRadius: 8,
-                          padding: '9px 18px',
-                          fontSize: 13,
-                          fontWeight: 600,
-                          cursor: tgGenerating ? 'not-allowed' : 'pointer',
-                          ...S.sans,
-                        }}
-                      >
-                        {tgGenerating ? 'Generating…' : 'Generate link code'}
-                      </button>
-                    ) : (
-                      <div>
-                        <div style={{ marginBottom: 14 }}>
-                          <div style={{ ...S.label, marginBottom: 8 }}>YOUR LINK CODE</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                            <span style={{
-                              fontSize: 32,
-                              fontWeight: 700,
-                              fontFamily: '"JetBrains Mono", monospace',
-                              color: '#a3e635',
-                              letterSpacing: '0.15em',
-                              background: 'rgba(163,230,53,0.06)',
-                              border: '1px solid rgba(163,230,53,0.2)',
-                              borderRadius: 10,
-                              padding: '10px 18px',
-                              userSelect: 'all',
-                            }}>
-                              {tgCode}
-                            </span>
-                            <button
-                              onClick={handleTgCopy}
-                              style={{
-                                background: tgCodeCopied ? 'rgba(163,230,53,0.12)' : '#1a1a1a',
-                                color: tgCodeCopied ? '#a3e635' : '#7a7a78',
-                                border: `1px solid ${tgCodeCopied ? 'rgba(163,230,53,0.3)' : '#2a2a2a'}`,
-                                borderRadius: 8,
-                                padding: '8px 14px',
-                                fontSize: 12,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                ...S.sans,
-                                transition: 'all 150ms',
-                              }}
-                            >
-                              {tgCodeCopied ? 'Copied!' : 'Copy command'}
-                            </button>
-                            <button
-                              onClick={handleTgGenerate}
-                              style={{
-                                background: 'transparent',
-                                color: '#5b5b59',
-                                border: '1px solid #222',
-                                borderRadius: 8,
-                                padding: '8px 14px',
-                                fontSize: 12,
-                                cursor: 'pointer',
-                                ...S.sans,
-                              }}
-                            >
-                              Regenerate
-                            </button>
-                          </div>
-                        </div>
-                        <div style={{ padding: '14px 16px', background: 'rgba(163,230,53,0.04)', border: '1px solid rgba(163,230,53,0.1)', borderRadius: 10 }}>
-                          <p style={{ fontSize: 13, color: '#7a7a78', ...S.sans, margin: '0 0 6px', lineHeight: 1.6 }}>
-                            Open Telegram and send this to <span style={{ color: '#a3e635', fontFamily: '"JetBrains Mono", monospace' }}>@your_duitaku_bot</span>:
-                          </p>
-                          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 14, color: '#f5f5f4' }}>
-                            /start {tgCode}
-                          </span>
-                          <p style={{ fontSize: 11, color: '#5b5b59', ...S.sans, margin: '10px 0 0', lineHeight: 1.5 }}>
-                            Code expires in 15 minutes.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ── FULL WIDTH: Investment Preferences ── */}
-            <div style={{ gridColumn: '1 / -1' }}>
-              <InvestmentPrefsCard />
-            </div>
-
-            {/* ── FULL WIDTH: Danger Zone ── */}
-            <div style={{ gridColumn: '1 / -1', background: '#111', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 14, padding: '24px 28px' }}>
-              <div style={{ ...S.label, color: '#ef4444', marginBottom: 6 }}>DANGER ZONE</div>
-              <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans, marginBottom: 20, lineHeight: 1.6 }}>
-                Permanently deletes your account and all associated data — transactions, accounts, investments, salary history, everything. This cannot be undone.
-              </div>
-              {deleteStep === 'idle' && (
-                <button
-                  onClick={() => setDeleteStep('confirm')}
-                  style={{ fontSize: 13, padding: '8px 18px', background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, color: '#ef4444', cursor: 'pointer', ...S.sans, fontWeight: 600 }}
-                >
-                  Delete my account
-                </button>
-              )}
-              {deleteStep === 'confirm' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ fontSize: 13, color: '#ef4444', ...S.sans, fontWeight: 600 }}>
-                    Enter your password to confirm deletion:
-                  </div>
+            {/* Pay cycle */}
+            <div style={cardStyle}>
+              <div style={{ ...S.label, marginBottom: 6 }}>PAY CYCLE</div>
+              <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: '0 0 16px', lineHeight: 1.6 }}>
+                The day your salary arrives each month. Budget cycles start from this day.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={S.label}>DAY OF MONTH</label>
                   <input
-                    type="password"
-                    value={deletePassword}
-                    onChange={e => { setDeletePassword(e.target.value); setDeleteError(null) }}
-                    placeholder="Your password"
-                    autoFocus
-                    style={{ width: 260, padding: '8px 12px', background: '#0d0d0d', border: `1px solid ${deleteError ? '#ef4444' : '#2a2a2a'}`, borderRadius: 8, color: '#e5e5e5', fontSize: 14, ...S.sans, outline: 'none' }}
-                    onKeyDown={e => e.key === 'Enter' && deletePassword && handleDeleteAccount()}
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={payDayInput}
+                    onChange={e => setPayDayInput(e.target.value)}
+                    style={{
+                      width: 80,
+                      background: '#0d0d0d',
+                      border: '1px solid #2a2a2a',
+                      borderRadius: 8,
+                      color: '#f5f5f4',
+                      fontSize: 15,
+                      fontWeight: 600,
+                      padding: '8px 12px',
+                      fontFamily: '"JetBrains Mono", monospace',
+                      outline: 'none',
+                    }}
                   />
-                  {deleteError && <div style={{ fontSize: 12, color: '#ef4444', ...S.sans }}>{deleteError}</div>}
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button
-                      onClick={handleDeleteAccount}
-                      disabled={!deletePassword}
-                      style={{ fontSize: 13, padding: '8px 18px', background: '#ef4444', border: 'none', borderRadius: 8, color: '#fff', cursor: deletePassword ? 'pointer' : 'not-allowed', opacity: deletePassword ? 1 : 0.5, ...S.sans, fontWeight: 600 }}
-                    >
-                      Yes, delete everything
-                    </button>
-                    <button
-                      onClick={() => { setDeleteStep('idle'); setDeletePassword(''); setDeleteError(null) }}
-                      style={{ fontSize: 13, padding: '8px 18px', background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 8, color: '#7a7a78', cursor: 'pointer', ...S.sans }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
                 </div>
-              )}
-              {deleteStep === 'deleting' && (
-                <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans }}>Deleting account…</div>
+                <button
+                  onClick={handlePayDaySave}
+                  style={{
+                    marginTop: 22,
+                    background: '#a3e635',
+                    color: '#0d0d0d',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '9px 18px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    ...S.sans,
+                  }}
+                >
+                  Save
+                </button>
+                {payDaySaved && (
+                  <span style={{ marginTop: 22, fontSize: 13, color: '#a3e635', ...S.sans }}>Saved!</span>
+                )}
+              </div>
+              {payDay > 1 && (
+                <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(163,230,53,0.05)', border: '1px solid rgba(163,230,53,0.12)', borderRadius: 8 }}>
+                  <span style={{ fontSize: 12, color: '#7a7a78', ...S.sans }}>
+                    Cycle: <span style={{ color: '#a3e635', fontWeight: 600 }}>day {payDay}</span> of each month
+                  </span>
+                </div>
               )}
             </div>
           </div>
+
+          {/* ── ROW 2: Salary form (full width — it's complex) ── */}
+          <div style={cardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <span style={S.label}>UPDATE SALARY</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {parseSuccess && (
+                  <span style={{ fontSize: 12, color: '#a3e635', ...S.sans }}>Payslip extracted — review and save</span>
+                )}
+                {parseError && (
+                  <span style={{ fontSize: 12, color: '#ef4444', ...S.sans }}>{parseError}</span>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  style={{ display: 'none' }}
+                  onChange={handlePayslipUpload}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={parsing || loading}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    background: parsing ? '#1a1a1a' : 'rgba(163,230,53,0.08)',
+                    color: parsing ? '#3a3a3a' : '#a3e635',
+                    border: `1px solid ${parsing ? '#222' : 'rgba(163,230,53,0.25)'}`,
+                    borderRadius: 8,
+                    padding: '7px 13px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: parsing ? 'not-allowed' : 'pointer',
+                    ...S.sans,
+                    transition: 'all 150ms',
+                  }}
+                >
+                  {parsing ? <SpinnerIcon /> : <UploadIcon />}
+                  {parsing ? 'Reading payslip…' : 'Upload payslip PDF'}
+                </button>
+              </div>
+            </div>
+
+            {loading ? (
+              <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans }}>Loading…</div>
+            ) : (
+              <SalaryForm
+                defaults={defaults}
+                fillKey={fillKey}
+                showEffectiveFrom
+                submitLabel={current ? 'Update Salary' : 'Set Salary'}
+                onSubmit={handleSave}
+              />
+            )}
+            <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(163,230,53,0.04)', border: '1px solid rgba(163,230,53,0.1)', borderRadius: 8 }}>
+              <p style={{ fontSize: 12, color: '#5b5b59', ...S.sans, margin: 0, lineHeight: 1.6 }}>
+                Salary history is preserved — each update adds a new entry. The most recent entry on or before the current month is used for budget calculations.
+              </p>
+            </div>
+          </div>
+
+          {/* ── ROW 3: Accounts + Telegram side by side ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
+            <AccountsManager />
+
+            {/* Connect Telegram */}
+            <div style={cardStyle}>
+              <div style={{ ...S.label, marginBottom: 6 }}>CONNECT TELEGRAM</div>
+              {tgConnected === null ? (
+                <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans }}>Loading…</div>
+              ) : tgConnected ? (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#a3e635', flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: '#a3e635', ...S.sans, fontWeight: 600 }}>Connected</span>
+                    {tgChatId && (
+                      <span style={{ fontSize: 12, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace' }}>· chat {tgChatId}</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleTgDisconnect}
+                    disabled={tgDisconnecting}
+                    style={{
+                      fontSize: 13,
+                      padding: '8px 18px',
+                      background: 'transparent',
+                      border: '1px solid #2a2a2a',
+                      borderRadius: 8,
+                      color: tgDisconnecting ? '#5b5b59' : '#7a7a78',
+                      cursor: tgDisconnecting ? 'not-allowed' : 'pointer',
+                      ...S.sans,
+                    }}
+                  >
+                    {tgDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: '0 0 16px', lineHeight: 1.6 }}>
+                    Link your Telegram account to log transactions and check your balance by sending a message.
+                  </p>
+                  {!tgCode ? (
+                    <button
+                      onClick={handleTgGenerate}
+                      disabled={tgGenerating}
+                      style={{
+                        background: tgGenerating ? '#1a1a1a' : 'rgba(163,230,53,0.08)',
+                        color: tgGenerating ? '#3a3a3a' : '#a3e635',
+                        border: `1px solid ${tgGenerating ? '#222' : 'rgba(163,230,53,0.25)'}`,
+                        borderRadius: 8,
+                        padding: '9px 18px',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: tgGenerating ? 'not-allowed' : 'pointer',
+                        ...S.sans,
+                      }}
+                    >
+                      {tgGenerating ? 'Generating…' : 'Generate link code'}
+                    </button>
+                  ) : (
+                    <div>
+                      <div style={{ ...S.label, marginBottom: 10 }}>YOUR LINK CODE</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+                        <span style={{
+                          fontSize: 28,
+                          fontWeight: 700,
+                          fontFamily: '"JetBrains Mono", monospace',
+                          color: '#a3e635',
+                          letterSpacing: '0.15em',
+                          background: 'rgba(163,230,53,0.06)',
+                          border: '1px solid rgba(163,230,53,0.2)',
+                          borderRadius: 10,
+                          padding: '8px 16px',
+                          userSelect: 'all',
+                        }}>
+                          {tgCode}
+                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <button
+                            onClick={handleTgCopy}
+                            style={{
+                              background: tgCodeCopied ? 'rgba(163,230,53,0.12)' : '#1a1a1a',
+                              color: tgCodeCopied ? '#a3e635' : '#7a7a78',
+                              border: `1px solid ${tgCodeCopied ? 'rgba(163,230,53,0.3)' : '#2a2a2a'}`,
+                              borderRadius: 8,
+                              padding: '6px 12px',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              ...S.sans,
+                              transition: 'all 150ms',
+                            }}
+                          >
+                            {tgCodeCopied ? 'Copied!' : 'Copy command'}
+                          </button>
+                          <button
+                            onClick={handleTgGenerate}
+                            style={{
+                              background: 'transparent',
+                              color: '#5b5b59',
+                              border: '1px solid #222',
+                              borderRadius: 8,
+                              padding: '6px 12px',
+                              fontSize: 12,
+                              cursor: 'pointer',
+                              ...S.sans,
+                            }}
+                          >
+                            Regenerate
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ padding: '12px 14px', background: 'rgba(163,230,53,0.04)', border: '1px solid rgba(163,230,53,0.1)', borderRadius: 10 }}>
+                        <p style={{ fontSize: 12, color: '#7a7a78', ...S.sans, margin: '0 0 4px', lineHeight: 1.6 }}>
+                          Send to <span style={{ color: '#a3e635', fontFamily: '"JetBrains Mono", monospace' }}>@your_duitaku_bot</span>:
+                        </p>
+                        <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 13, color: '#f5f5f4' }}>
+                          /start {tgCode}
+                        </span>
+                        <p style={{ fontSize: 11, color: '#5b5b59', ...S.sans, margin: '8px 0 0', lineHeight: 1.5 }}>
+                          Code expires in 15 minutes.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── ROW 4: Investment Preferences ── */}
+          <InvestmentPrefsCard />
+
+          {/* ── ROW 5: Danger Zone ── */}
+          <div style={{ background: '#111', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 14, padding: '24px 28px' }}>
+            <div style={{ ...S.label, color: '#ef4444', marginBottom: 6 }}>DANGER ZONE</div>
+            <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans, marginBottom: 20, lineHeight: 1.6 }}>
+              Permanently deletes your account and all associated data — transactions, accounts, investments, salary history, everything. This cannot be undone.
+            </div>
+            {deleteStep === 'idle' && (
+              <button
+                onClick={() => setDeleteStep('confirm')}
+                style={{ fontSize: 13, padding: '8px 18px', background: 'transparent', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, color: '#ef4444', cursor: 'pointer', ...S.sans, fontWeight: 600 }}
+              >
+                Delete my account
+              </button>
+            )}
+            {deleteStep === 'confirm' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 13, color: '#ef4444', ...S.sans, fontWeight: 600 }}>
+                  Enter your password to confirm deletion:
+                </div>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={e => { setDeletePassword(e.target.value); setDeleteError(null) }}
+                  placeholder="Your password"
+                  autoFocus
+                  style={{ width: 260, padding: '8px 12px', background: '#0d0d0d', border: `1px solid ${deleteError ? '#ef4444' : '#2a2a2a'}`, borderRadius: 8, color: '#e5e5e5', fontSize: 14, ...S.sans, outline: 'none' }}
+                  onKeyDown={e => e.key === 'Enter' && deletePassword && handleDeleteAccount()}
+                />
+                {deleteError && <div style={{ fontSize: 12, color: '#ef4444', ...S.sans }}>{deleteError}</div>}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    onClick={handleDeleteAccount}
+                    disabled={!deletePassword}
+                    style={{ fontSize: 13, padding: '8px 18px', background: '#ef4444', border: 'none', borderRadius: 8, color: '#fff', cursor: deletePassword ? 'pointer' : 'not-allowed', opacity: deletePassword ? 1 : 0.5, ...S.sans, fontWeight: 600 }}
+                  >
+                    Yes, delete everything
+                  </button>
+                  <button
+                    onClick={() => { setDeleteStep('idle'); setDeletePassword(''); setDeleteError(null) }}
+                    style={{ fontSize: 13, padding: '8px 18px', background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 8, color: '#7a7a78', cursor: 'pointer', ...S.sans }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {deleteStep === 'deleting' && (
+              <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans }}>Deleting account…</div>
+            )}
+          </div>
+
         </div>
       </div>
     </div>
