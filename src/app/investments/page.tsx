@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import SidebarClient from '@/components/finance/SidebarClient'
 import { Icon } from '@/components/finance/icons'
+import { fetchAssetInsight, investmentTypesToAssets, resolveAsset, signalEmoji, AssetInsight } from '@/lib/market-data'
 
 interface Investment {
   id: string
@@ -18,6 +19,38 @@ interface Investment {
   autoSync: boolean
   lastSyncedAt: string | null
   createdAt: string
+}
+
+interface InvestPrefs {
+  setupDone: boolean
+  showMarketPulse: boolean
+  showWatchlist: boolean
+  trackedTypes: string[]
+  watchlist: string[]
+}
+
+const DEFAULT_PREFS: InvestPrefs = {
+  setupDone: false,
+  showMarketPulse: true,
+  showWatchlist: false,
+  trackedTypes: [],
+  watchlist: [],
+}
+
+const PREFS_KEY = 'duitaku_invest_prefs_v1'
+
+function loadPrefs(): InvestPrefs {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY)
+    if (!raw) return { ...DEFAULT_PREFS }
+    return { ...DEFAULT_PREFS, ...JSON.parse(raw) }
+  } catch {
+    return { ...DEFAULT_PREFS }
+  }
+}
+
+function savePrefs(prefs: InvestPrefs) {
+  localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
 }
 
 const S = {
@@ -58,6 +91,22 @@ const TYPE_LABELS: Record<string, string> = {
   property: 'PROPERTY',
 }
 
+// Asset types that have live price feeds
+const LIVE_TYPES = ['gold', 'crypto', 'stocks_bursa', 'stocks_us']
+
+// All setup wizard types (regardless of what user holds)
+const WIZARD_TYPES = [
+  { value: 'epf', label: 'EPF / KWSP', hasLive: false, note: 'Updated manually, no live feed' },
+  { value: 'asb', label: 'ASB', hasLive: false, note: 'Updated manually, no live feed' },
+  { value: 'tabung_haji', label: 'Tabung Haji', hasLive: false, note: 'Updated manually, no live feed' },
+  { value: 'fixed_deposit', label: 'Fixed Deposit', hasLive: false, note: 'Updated manually, no live feed' },
+  { value: 'gold', label: 'Gold', hasLive: true, note: 'Live price available' },
+  { value: 'crypto', label: 'Crypto', hasLive: true, note: 'Live price available' },
+  { value: 'stocks_bursa', label: 'Stocks — Bursa', hasLive: true, note: 'Live price available' },
+  { value: 'stocks_us', label: 'Stocks — US', hasLive: true, note: 'Live price available' },
+  { value: 'unit_trust', label: 'Unit Trust / Bonds / Other', hasLive: false, note: 'No live feed' },
+]
+
 function fmtMYR(v: number) {
   return `RM ${Math.abs(v).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -70,6 +119,10 @@ function fmtDate(s: string | null) {
   if (!s) return 'Never'
   const d = new Date(s)
   return d.toLocaleString('en-MY', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function fmtTime(d: Date) {
+  return d.toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' })
 }
 
 const inputStyle: React.CSSProperties = {
@@ -120,12 +173,406 @@ const TYPE_OPTIONS = [
   { value: 'other', label: 'Other' },
 ]
 
+// ─── Signal badge ─────────────────────────────────────────────────────────────
+function SignalBadge({ signal }: { signal: AssetInsight['signal'] }) {
+  const colors: Record<string, { bg: string; text: string }> = {
+    buy:     { bg: 'rgba(34,197,94,0.12)',  text: '#22c55e' },
+    sell:    { bg: 'rgba(239,68,68,0.12)',  text: '#ef4444' },
+    hold:    { bg: 'rgba(234,179,8,0.12)',  text: '#eab308' },
+    neutral: { bg: 'rgba(156,163,175,0.12)', text: '#9ca3af' },
+  }
+  const c = colors[signal] ?? colors.neutral
+  return (
+    <span style={{
+      fontSize: 10,
+      fontFamily: '"JetBrains Mono", monospace',
+      letterSpacing: '0.06em',
+      background: c.bg,
+      color: c.text,
+      borderRadius: 5,
+      padding: '2px 7px',
+      fontWeight: 700,
+    }}>
+      {signalEmoji(signal)} {signal.toUpperCase()}
+    </span>
+  )
+}
+
+// ─── Asset insight card row ────────────────────────────────────────────────────
+function AssetCard({ insight }: { insight: AssetInsight }) {
+  const changeColor = insight.change30d >= 0 ? '#a3e635' : '#ef4444'
+  const priceDisplay = insight.priceMYR != null
+    ? `RM ${insight.priceMYR.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `${insight.currency} ${insight.price.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 12,
+      padding: '12px 0',
+      borderBottom: '1px solid #1a1a1a',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>{insight.label}</span>
+          <span style={{ fontSize: 10, color: '#5b5b59', ...S.mono }}>{insight.ticker}</span>
+        </div>
+        <div style={{ fontSize: 11, color: '#7a7a78', ...S.sans, lineHeight: 1.5 }}>{insight.signalReason}</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#f5f5f4', ...S.mono }}>{priceDisplay}</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: changeColor, ...S.mono }}>{fmtPct(insight.change30d)} 30d</span>
+        <SignalBadge signal={insight.signal} />
+      </div>
+    </div>
+  )
+}
+
+// ─── Market Pulse section ──────────────────────────────────────────────────────
+function MarketPulseSection({ prefs, investments }: { prefs: InvestPrefs; investments: Investment[] }) {
+  const [insights, setInsights] = useState<AssetInsight[]>([])
+  const [loading, setLoading] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const hasLiveTypes = prefs.trackedTypes.some(t => LIVE_TYPES.includes(t))
+  if (!prefs.showMarketPulse || !hasLiveTypes) return null
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    let cancelled = false
+    async function fetch_() {
+      setLoading(true)
+      // Filter investments to only those matching tracked live types
+      const filtered = investments.filter(inv => LIVE_TYPES.includes(inv.type) && prefs.trackedTypes.includes(inv.type))
+      const assets = investmentTypesToAssets(filtered)
+
+      // Also add watchlist tickers if showMarketPulse
+      const watchlistAssets = prefs.watchlist.flatMap(ticker => {
+        const resolved = resolveAsset(ticker)
+        return resolved ? [resolved] : []
+      })
+
+      // Deduplicate
+      const seen = new Set(assets.map(a => a.ticker))
+      const allAssets = [...assets]
+      for (const wa of watchlistAssets) {
+        if (!seen.has(wa.ticker)) {
+          seen.add(wa.ticker)
+          allAssets.push(wa)
+        }
+      }
+
+      const results = await Promise.all(
+        allAssets.map(a => fetchAssetInsight(a.ticker, a.label, a.currency, a.isMYR))
+      )
+      if (!cancelled) {
+        setInsights(results.filter((r): r is AssetInsight => r !== null))
+        setLastUpdated(new Date())
+        setLoading(false)
+      }
+    }
+    fetch_()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.trackedTypes, prefs.watchlist, investments])
+
+  return (
+    <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '20px 24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ ...S.label }}>MARKET PULSE</div>
+        {lastUpdated && !loading && (
+          <span style={{ fontSize: 10, color: '#5b5b59', ...S.mono }}>Last updated: {fmtTime(lastUpdated)}</span>
+        )}
+      </div>
+      {loading ? (
+        <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>⏳ Loading market data…</div>
+      ) : insights.length === 0 ? (
+        <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>No market data available for tracked types.</div>
+      ) : (
+        <div>
+          {insights.map(ins => <AssetCard key={ins.ticker} insight={ins} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Watchlist section ─────────────────────────────────────────────────────────
+function WatchlistSection({ prefs, onPrefsChange }: { prefs: InvestPrefs; onPrefsChange: (p: InvestPrefs) => void }) {
+  const [insights, setInsights] = useState<AssetInsight[]>([])
+  const [loading, setLoading] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [addInput, setAddInput] = useState('')
+  const [showAddInput, setShowAddInput] = useState(false)
+
+  if (!prefs.showWatchlist || prefs.watchlist.length === 0) return null
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    let cancelled = false
+    async function fetch_() {
+      setLoading(true)
+      const results = await Promise.all(
+        prefs.watchlist.map(async (ticker) => {
+          const resolved = resolveAsset(ticker)
+          if (!resolved) return null
+          return fetchAssetInsight(resolved.ticker, resolved.label, resolved.currency, resolved.isMYR)
+        })
+      )
+      if (!cancelled) {
+        setInsights(results.filter((r): r is AssetInsight => r !== null))
+        setLastUpdated(new Date())
+        setLoading(false)
+      }
+    }
+    fetch_()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.watchlist])
+
+  function addTicker() {
+    const t = addInput.trim()
+    if (!t || prefs.watchlist.includes(t)) { setAddInput(''); setShowAddInput(false); return }
+    const updated = { ...prefs, watchlist: [...prefs.watchlist, t] }
+    onPrefsChange(updated)
+    savePrefs(updated)
+    setAddInput('')
+    setShowAddInput(false)
+  }
+
+  function removeTicker(ticker: string) {
+    const updated = { ...prefs, watchlist: prefs.watchlist.filter(t => t !== ticker) }
+    onPrefsChange(updated)
+    savePrefs(updated)
+  }
+
+  return (
+    <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '20px 24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ ...S.label }}>WATCHLIST</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {lastUpdated && !loading && (
+            <span style={{ fontSize: 10, color: '#5b5b59', ...S.mono }}>Last updated: {fmtTime(lastUpdated)}</span>
+          )}
+          <button
+            onClick={() => setShowAddInput(v => !v)}
+            style={{ fontSize: 11, ...S.mono, color: '#a3e635', background: 'rgba(163,230,53,0.08)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', letterSpacing: '0.04em' }}
+          >
+            ＋ Add
+          </button>
+        </div>
+      </div>
+      {showAddInput && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+          <input
+            autoFocus
+            value={addInput}
+            onChange={e => setAddInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addTicker(); if (e.key === 'Escape') { setShowAddInput(false); setAddInput('') } }}
+            placeholder="e.g. AAPL, BTC-USD, 1155.KL"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button onClick={addTicker} style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 600, fontSize: 12, cursor: 'pointer', ...S.sans }}>Add</button>
+          <button onClick={() => { setShowAddInput(false); setAddInput('') }} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 8, padding: '8px 10px', fontSize: 12, color: '#5b5b59', cursor: 'pointer', ...S.sans }}>✕</button>
+        </div>
+      )}
+      {/* Ticker pills */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+        {prefs.watchlist.map(t => (
+          <span key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, ...S.mono, color: '#f5f5f4', background: '#1a1a1a', border: '1px solid #222', borderRadius: 5, padding: '3px 8px' }}>
+            {t}
+            <button onClick={() => removeTicker(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b5b59', padding: 0, lineHeight: 1, fontSize: 11 }}>×</button>
+          </span>
+        ))}
+      </div>
+      {loading ? (
+        <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>⏳ Loading watchlist data…</div>
+      ) : insights.length === 0 ? (
+        <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>No data available for watchlist tickers.</div>
+      ) : (
+        <div>
+          {insights.map(ins => <AssetCard key={ins.ticker} insight={ins} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Setup wizard modal ────────────────────────────────────────────────────────
+function SetupWizard({
+  investments,
+  initialPrefs,
+  isUpdate,
+  onDone,
+  onClose,
+}: {
+  investments: Investment[]
+  initialPrefs: InvestPrefs
+  isUpdate: boolean
+  onDone: (prefs: InvestPrefs) => void
+  onClose: () => void
+}) {
+  const [step, setStep] = useState(1)
+  const [checkedTypes, setCheckedTypes] = useState<string[]>(initialPrefs.trackedTypes)
+  const [watchlist, setWatchlist] = useState<string[]>(initialPrefs.watchlist)
+  const [tickerInput, setTickerInput] = useState('')
+
+  // Portfolio types the user already holds
+  const portfolioTypes = Array.from(new Set(investments.map(i => i.type)))
+
+  function toggleType(val: string) {
+    setCheckedTypes(prev => prev.includes(val) ? prev.filter(t => t !== val) : [...prev, val])
+  }
+
+  function addTicker() {
+    const t = tickerInput.trim()
+    if (!t || watchlist.includes(t)) { setTickerInput(''); return }
+    setWatchlist(prev => [...prev, t])
+    setTickerInput('')
+  }
+
+  function removeTicker(t: string) {
+    setWatchlist(prev => prev.filter(x => x !== t))
+  }
+
+  function handleDone() {
+    const newPrefs: InvestPrefs = {
+      setupDone: true,
+      showMarketPulse: initialPrefs.showMarketPulse,
+      showWatchlist: watchlist.length > 0,
+      trackedTypes: checkedTypes,
+      watchlist,
+    }
+    savePrefs(newPrefs)
+    onDone(newPrefs)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
+      <div style={{ background: '#111', border: '1px solid #222', borderRadius: 18, padding: 32, width: 520, maxWidth: '94vw', boxShadow: '0 32px 80px rgba(0,0,0,0.7)', maxHeight: '90vh', overflowY: 'auto' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
+          <div>
+            <div style={{ ...S.label, marginBottom: 6 }}>STEP {step} OF 3</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', ...S.sans }}>
+              {isUpdate ? 'Update your view' : 'Set up your view'}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#5b5b59', padding: 4 }}>
+            <Icon name="close" width={18} height={18} />
+          </button>
+        </div>
+
+        {/* Step 1 — What do you hold? */}
+        {step === 1 && (
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', ...S.sans, marginBottom: 6 }}>What do you hold?</div>
+            <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans, marginBottom: 20, lineHeight: 1.6 }}>
+              Select asset types to track market data for. We&#39;ll show live prices for supported types.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {WIZARD_TYPES.map(wt => {
+                const isInPortfolio = portfolioTypes.includes(wt.value)
+                const checked = checkedTypes.includes(wt.value)
+                return (
+                  <label key={wt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', padding: '10px 14px', background: checked ? 'rgba(163,230,53,0.06)' : '#0d0d0d', border: `1px solid ${checked ? 'rgba(163,230,53,0.25)' : '#1a1a1a'}`, borderRadius: 10, userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleType(wt.value)}
+                      style={{ marginTop: 2, accentColor: '#a3e635', width: 15, height: 15, flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>{wt.label}</span>
+                        {isInPortfolio && (
+                          <span style={{ fontSize: 9, ...S.mono, letterSpacing: '0.06em', color: '#a3e635', background: 'rgba(163,230,53,0.1)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 4, padding: '1px 5px' }}>IN PORTFOLIO</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: wt.hasLive ? '#a3e635' : '#5b5b59', ...S.sans, marginTop: 2 }}>{wt.note}</div>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+            <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setStep(2)} style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', ...S.sans }}>
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2 — Watchlist */}
+        {step === 2 && (
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', ...S.sans, marginBottom: 6 }}>Want a watchlist?</div>
+            <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans, marginBottom: 20, lineHeight: 1.6 }}>
+              Track assets you&#39;re considering buying. Add tickers like <span style={{ color: '#f5f5f4', ...S.mono }}>1155</span>, <span style={{ color: '#f5f5f4', ...S.mono }}>BTC-USD</span>, or <span style={{ color: '#f5f5f4', ...S.mono }}>AAPL</span>.
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <input
+                value={tickerInput}
+                onChange={e => setTickerInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addTicker() }}
+                placeholder="e.g. AAPL, BTC-USD, 1155.KL"
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button onClick={addTicker} style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 8, padding: '9px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer', ...S.sans, flexShrink: 0 }}>Add</button>
+            </div>
+            {watchlist.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                {watchlist.map(t => (
+                  <span key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, ...S.mono, color: '#f5f5f4', background: '#1a1a1a', border: '1px solid #222', borderRadius: 5, padding: '4px 10px' }}>
+                    {t}
+                    <button onClick={() => removeTicker(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b5b59', padding: 0, lineHeight: 1, fontSize: 12 }}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button onClick={() => setStep(1)} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 9, padding: '10px 18px', fontSize: 13, color: '#7a7a78', cursor: 'pointer', ...S.sans }}>← Back</button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => { setWatchlist([]); setStep(3) }} style={{ background: 'transparent', border: '1px solid #222', borderRadius: 9, padding: '10px 18px', fontSize: 13, color: '#7a7a78', cursor: 'pointer', ...S.sans }}>Skip</button>
+                <button onClick={() => setStep(3)} style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', ...S.sans }}>Next →</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 — Done */}
+        {step === 3 && (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#f5f5f4', ...S.sans, marginBottom: 8 }}>Your view is set up.</div>
+            <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans, marginBottom: 8, lineHeight: 1.6 }}>
+              Tracking <strong style={{ color: '#a3e635' }}>{checkedTypes.length}</strong> asset type{checkedTypes.length !== 1 ? 's' : ''}
+              {watchlist.length > 0 && <>, watching <strong style={{ color: '#a3e635' }}>{watchlist.length}</strong> ticker{watchlist.length !== 1 ? 's' : ''}</>}.
+            </div>
+            <div style={{ marginTop: 28 }}>
+              <button onClick={handleDone} style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer', ...S.sans }}>Go to portfolio</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
 export default function InvestmentsPage() {
   const [investments, setInvestments] = useState<Investment[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [syncWarnings, setSyncWarnings] = useState<string[]>([])
+
+  // Prefs
+  const [prefs, setPrefs] = useState<InvestPrefs>(DEFAULT_PREFS)
+  const [showWizard, setShowWizard] = useState(false)
+  const [isUpdateWizard, setIsUpdateWizard] = useState(false)
+  const prefsLoaded = useRef(false)
 
   // Credential check
   const [kucoinConfigured, setKucoinConfigured] = useState(false)
@@ -172,6 +619,18 @@ export default function InvestmentsPage() {
   useEffect(() => { load() }, [load])
   useEffect(() => { checkKucoin() }, [checkKucoin])
 
+  // Load prefs from localStorage once mounted
+  useEffect(() => {
+    if (prefsLoaded.current) return
+    prefsLoaded.current = true
+    const p = loadPrefs()
+    setPrefs(p)
+    if (!p.setupDone) {
+      setIsUpdateWizard(false)
+      setShowWizard(true)
+    }
+  }, [])
+
   async function handleEpfUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -192,17 +651,14 @@ export default function InvestmentsPage() {
 
   async function applyEpfResult() {
     if (!epfResult) return
-    // Find existing EPF investment entries or create new ones
     const epfInvestments = investments.filter(i => i.type === 'epf')
     if (epfInvestments.length === 1) {
-      // Update the single EPF entry with total balance
       await fetch(`/api/investments/${epfInvestments[0].id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentValue: epfResult.totalBalance }),
       })
     } else if (epfInvestments.length === 0) {
-      // Create a new EPF entry
       await fetch('/api/investments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -340,7 +796,6 @@ export default function InvestmentsPage() {
     .filter(i => i.autoSync && i.lastSyncedAt)
     .sort((a, b) => new Date(b.lastSyncedAt!).getTime() - new Date(a.lastSyncedAt!).getTime())[0]?.lastSyncedAt ?? null
 
-  // Allocation by type (for portfolio summary panel)
   const allocationByType: Record<string, number> = {}
   for (const inv of investments) {
     allocationByType[inv.type] = (allocationByType[inv.type] ?? 0) + inv.currentValue
@@ -357,12 +812,20 @@ export default function InvestmentsPage() {
             <span style={S.label}>PORTFOLIO</span>
             <span style={{ fontSize: 18, fontWeight: 600, ...S.sans, color: '#f5f5f4' }}>Investments</span>
           </div>
-          <button
-            onClick={() => setShowAdd(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '0 16px', height: 36, cursor: 'pointer', fontSize: 13.5, fontWeight: 600, ...S.sans }}
-          >
-            + Add
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              onClick={() => { setIsUpdateWizard(true); setShowWizard(true) }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', color: '#7a7a78', border: '1px solid #222', borderRadius: 9, padding: '0 14px', height: 36, cursor: 'pointer', fontSize: 13, fontWeight: 500, ...S.sans }}
+            >
+              ⚙ Customise
+            </button>
+            <button
+              onClick={() => setShowAdd(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '0 16px', height: 36, cursor: 'pointer', fontSize: 13.5, fontWeight: 600, ...S.sans }}
+            >
+              + Add
+            </button>
+          </div>
         </div>
 
         <div style={{ padding: '20px 32px 48px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -383,6 +846,12 @@ export default function InvestmentsPage() {
               </div>
             ))}
           </div>
+
+          {/* Market Pulse */}
+          {!loading && <MarketPulseSection prefs={prefs} investments={investments} />}
+
+          {/* Watchlist */}
+          {!loading && <WatchlistSection prefs={prefs} onPrefsChange={setPrefs} />}
 
           {/* KuCoin sync section */}
           <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '16px 20px' }}>
@@ -822,6 +1291,25 @@ export default function InvestmentsPage() {
             </div>
           )}
         </div>
+
+        {/* Setup Wizard Modal */}
+        {showWizard && (
+          <SetupWizard
+            investments={investments}
+            initialPrefs={prefs}
+            isUpdate={isUpdateWizard}
+            onDone={(newPrefs) => { setPrefs(newPrefs); setShowWizard(false) }}
+            onClose={() => {
+              // If first time and user closes without completing, mark done to avoid re-showing
+              if (!prefs.setupDone) {
+                const p = { ...prefs, setupDone: true }
+                savePrefs(p)
+                setPrefs(p)
+              }
+              setShowWizard(false)
+            }}
+          />
+        )}
 
         {/* Add Investment Modal */}
         {showAdd && (
