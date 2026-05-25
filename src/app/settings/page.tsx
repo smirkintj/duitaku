@@ -273,6 +273,7 @@ export default function SettingsPage() {
   const [tgCodeCopied, setTgCodeCopied] = useState(false)
   const [tgGenerating, setTgGenerating] = useState(false)
   const [tgDisconnecting, setTgDisconnecting] = useState(false)
+  const [tgBotUsername, setTgBotUsername] = useState<string | null>(null)
 
   async function handleDeleteAccount() {
     setDeleteStep('deleting')
@@ -296,6 +297,9 @@ export default function SettingsPage() {
       setTgConnected(data.connected)
       setTgChatId(data.chatId)
     }).catch(() => setTgConnected(false))
+    fetch('/api/telegram/bot-info').then(r => r.json()).then((d: { username?: string }) => {
+      if (d.username) setTgBotUsername(d.username)
+    }).catch(() => {})
   }, [])
 
   async function handleTgGenerate() {
@@ -602,122 +606,134 @@ export default function SettingsPage() {
 
             {/* Connect Telegram */}
             <div style={cardStyle}>
-              <div style={{ ...S.label, marginBottom: 6 }}>CONNECT TELEGRAM</div>
+              <div style={{ ...S.label, marginBottom: 14 }}>TELEGRAM BOT</div>
+
               {tgConnected === null ? (
                 <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans }}>Loading…</div>
+
               ) : tgConnected ? (
+                /* ── Connected state ── */
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                     <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#a3e635', flexShrink: 0 }} />
                     <span style={{ fontSize: 13, color: '#a3e635', ...S.sans, fontWeight: 600 }}>Connected</span>
-                    {tgChatId && (
-                      <span style={{ fontSize: 12, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace' }}>· chat {tgChatId}</span>
+                    {tgBotUsername && (
+                      <a
+                        href={`https://t.me/${tgBotUsername}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: 12, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace', textDecoration: 'none' }}
+                      >
+                        @{tgBotUsername}
+                      </a>
                     )}
                   </div>
+
+                  {/* Command cheatsheet */}
+                  <div style={{ marginBottom: 16 }}>
+                    {([
+                      { group: 'Log', items: ['spent RM45 at lunch', 'received RM500', 'topup RM100 to TnG', 'paid celcomdigi'] },
+                      { group: 'Check', items: ['how much left', 'net worth', 'my investments', 'how much loan'] },
+                      { group: 'History', items: ['last 5 transactions', 'when did i pay unifi'] },
+                      { group: 'Market', items: ['gold', 'KLSE', 'BTC price'] },
+                    ] as { group: string; items: string[] }[]).map(({ group, items }) => (
+                      <div key={group} style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#3a3a3a', letterSpacing: '0.08em', marginBottom: 5 }}>{group.toUpperCase()}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          {items.map(cmd => (
+                            <span key={cmd} style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#7a7a78' }}>"{cmd}"</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 11, color: '#3a3a3a', ...S.sans, marginTop: 4 }}>Send /help to the bot to see this list anytime.</div>
+                  </div>
+
                   <button
                     onClick={handleTgDisconnect}
                     disabled={tgDisconnecting}
-                    style={{
-                      fontSize: 13,
-                      padding: '8px 18px',
-                      background: 'transparent',
-                      border: '1px solid #2a2a2a',
-                      borderRadius: 8,
-                      color: tgDisconnecting ? '#5b5b59' : '#7a7a78',
-                      cursor: tgDisconnecting ? 'not-allowed' : 'pointer',
-                      ...S.sans,
-                    }}
+                    style={{ fontSize: 13, padding: '7px 16px', background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 8, color: tgDisconnecting ? '#5b5b59' : '#7a7a78', cursor: tgDisconnecting ? 'not-allowed' : 'pointer', ...S.sans }}
                   >
                     {tgDisconnecting ? 'Disconnecting…' : 'Disconnect'}
                   </button>
                 </div>
+
               ) : (
+                /* ── Not connected state ── */
                 <div>
-                  <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: '0 0 16px', lineHeight: 1.6 }}>
-                    Link your Telegram account to log transactions and check your balance by sending a message.
-                  </p>
+                  {/* Feature pills */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
+                    {['Log expenses', 'Check balance', 'Mark bills paid', 'Top up accounts', 'View investments', 'Net worth', 'Market prices', 'Payment history'].map(f => (
+                      <span key={f} style={{ fontSize: 11, ...S.sans, color: '#7a7a78', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 20, padding: '3px 10px' }}>{f}</span>
+                    ))}
+                  </div>
+
                   {!tgCode ? (
                     <button
                       onClick={handleTgGenerate}
                       disabled={tgGenerating}
-                      style={{
-                        background: tgGenerating ? '#1a1a1a' : 'rgba(163,230,53,0.08)',
-                        color: tgGenerating ? '#3a3a3a' : '#a3e635',
-                        border: `1px solid ${tgGenerating ? '#222' : 'rgba(163,230,53,0.25)'}`,
-                        borderRadius: 8,
-                        padding: '9px 18px',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        cursor: tgGenerating ? 'not-allowed' : 'pointer',
-                        ...S.sans,
-                      }}
+                      style={{ background: tgGenerating ? '#1a1a1a' : 'rgba(163,230,53,0.08)', color: tgGenerating ? '#3a3a3a' : '#a3e635', border: `1px solid ${tgGenerating ? '#222' : 'rgba(163,230,53,0.25)'}`, borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: tgGenerating ? 'not-allowed' : 'pointer', ...S.sans }}
                     >
                       {tgGenerating ? 'Generating…' : 'Generate link code'}
                     </button>
                   ) : (
+                    /* ── Setup steps ── */
                     <div>
-                      <div style={{ ...S.label, marginBottom: 10 }}>YOUR LINK CODE</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-                        <span style={{
-                          fontSize: 28,
-                          fontWeight: 700,
-                          fontFamily: '"JetBrains Mono", monospace',
-                          color: '#a3e635',
-                          letterSpacing: '0.15em',
-                          background: 'rgba(163,230,53,0.06)',
-                          border: '1px solid rgba(163,230,53,0.2)',
-                          borderRadius: 10,
-                          padding: '8px 16px',
-                          userSelect: 'all',
-                        }}>
-                          {tgCode}
-                        </span>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <button
-                            onClick={handleTgCopy}
-                            style={{
-                              background: tgCodeCopied ? 'rgba(163,230,53,0.12)' : '#1a1a1a',
-                              color: tgCodeCopied ? '#a3e635' : '#7a7a78',
-                              border: `1px solid ${tgCodeCopied ? 'rgba(163,230,53,0.3)' : '#2a2a2a'}`,
-                              borderRadius: 8,
-                              padding: '6px 12px',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              ...S.sans,
-                              transition: 'all 150ms',
-                            }}
-                          >
-                            {tgCodeCopied ? 'Copied!' : 'Copy command'}
-                          </button>
-                          <button
-                            onClick={handleTgGenerate}
-                            style={{
-                              background: 'transparent',
-                              color: '#5b5b59',
-                              border: '1px solid #222',
-                              borderRadius: 8,
-                              padding: '6px 12px',
-                              fontSize: 12,
-                              cursor: 'pointer',
-                              ...S.sans,
-                            }}
-                          >
-                            Regenerate
-                          </button>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 }}>
+
+                        {/* Step 1 */}
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                          <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#1a1a1a', border: '1px solid #2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', flexShrink: 0 }}>1</span>
+                          <div>
+                            <div style={{ fontSize: 13, color: '#f5f5f4', ...S.sans, marginBottom: 4, fontWeight: 500 }}>Open the bot in Telegram</div>
+                            {tgBotUsername ? (
+                              <a
+                                href={`https://t.me/${tgBotUsername}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ display: 'inline-block', fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: '#a3e635', background: 'rgba(163,230,53,0.06)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 6, padding: '4px 10px', textDecoration: 'none' }}
+                              >
+                                @{tgBotUsername}
+                              </a>
+                            ) : (
+                              <span style={{ fontSize: 12, color: '#5b5b59', ...S.sans }}>Search for your bot in Telegram</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Step 2 */}
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                          <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#1a1a1a', border: '1px solid #2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', flexShrink: 0 }}>2</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, color: '#f5f5f4', ...S.sans, marginBottom: 8, fontWeight: 500 }}>Send this command to the bot</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 15, fontWeight: 700, fontFamily: '"JetBrains Mono", monospace', color: '#a3e635', letterSpacing: '0.12em', background: 'rgba(163,230,53,0.06)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 8, padding: '6px 14px', userSelect: 'all' as const }}>
+                                /start {tgCode}
+                              </span>
+                              <button
+                                onClick={handleTgCopy}
+                                style={{ background: tgCodeCopied ? 'rgba(163,230,53,0.12)' : '#1a1a1a', color: tgCodeCopied ? '#a3e635' : '#7a7a78', border: `1px solid ${tgCodeCopied ? 'rgba(163,230,53,0.3)' : '#2a2a2a'}`, borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', ...S.sans, transition: 'all 150ms' }}
+                              >
+                                {tgCodeCopied ? 'Copied!' : 'Copy'}
+                              </button>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#3a3a3a', ...S.sans, marginTop: 6 }}>Code expires in 15 minutes.</div>
+                          </div>
+                        </div>
+
+                        {/* Step 3 */}
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                          <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#1a1a1a', border: '1px solid #2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', flexShrink: 0 }}>3</span>
+                          <div style={{ fontSize: 13, color: '#f5f5f4', ...S.sans, fontWeight: 500, paddingTop: 2 }}>Done — the bot will confirm and show all commands</div>
                         </div>
                       </div>
-                      <div style={{ padding: '12px 14px', background: 'rgba(163,230,53,0.04)', border: '1px solid rgba(163,230,53,0.1)', borderRadius: 10 }}>
-                        <p style={{ fontSize: 12, color: '#7a7a78', ...S.sans, margin: '0 0 4px', lineHeight: 1.6 }}>
-                          Send to <span style={{ color: '#a3e635', fontFamily: '"JetBrains Mono", monospace' }}>@your_duitaku_bot</span>:
-                        </p>
-                        <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 13, color: '#f5f5f4' }}>
-                          /start {tgCode}
-                        </span>
-                        <p style={{ fontSize: 11, color: '#5b5b59', ...S.sans, margin: '8px 0 0', lineHeight: 1.5 }}>
-                          Code expires in 15 minutes.
-                        </p>
-                      </div>
+
+                      <button
+                        onClick={handleTgGenerate}
+                        style={{ background: 'transparent', color: '#5b5b59', border: '1px solid #222', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer', ...S.sans }}
+                      >
+                        Regenerate code
+                      </button>
                     </div>
                   )}
                 </div>

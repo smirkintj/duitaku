@@ -73,20 +73,54 @@ async function handleLink(chatId: string, code: string | undefined): Promise<voi
 
   await db.delete(telegramLinkCodes).where(eq(telegramLinkCodes.code, code))
 
-  await sendMessage(chatId, `✅ Your Telegram is now linked to duitaku!
+  await sendMessage(chatId, `Your Telegram is now linked to duitaku!
 
-You can ask me:
-• "paid celcomdigi" — mark a bill as paid
-• "spent RM45 lunch" — log an expense
+Here's what I can do:
+
+SPENDING
+• "spent RM45 at lunch" — log an expense
 • "received RM500" — log income
-• "how much left" — this month's balance
-• "how much loan" — loan summary
-• "my investments" — investment portfolio
+• "topup RM100 to TnG" — top up an account
+• "paid celcomdigi" — mark a bill as paid
+
+BALANCE & OVERVIEW
+• "how much left" — this month's budget
 • "net worth" — assets vs liabilities
-• "gold" or "gold price" — live gold price + signal
+• "my investments" — portfolio summary
+• "how much loan" — loan balances
+
+HISTORY
+• "last 5 transactions" — recent spending
 • "when did i pay celcomdigi" — payment history
-• "last 5 transactions" — recent spending`)
+
+MARKET
+• "gold" / "KLSE" / "BTC" — live price + signal
+
+Send /help anytime to see this list again.`)
 }
+
+const HELP_TEXT = `What I can do:
+
+SPENDING
+• "spent RM45 at lunch" — log expense
+• "received RM500 bonus" — log income
+• "topup RM100 to TnG" — top up account
+• "paid celcomdigi" — mark bill as paid
+
+BALANCE
+• "how much left" — monthly budget
+• "net worth" — assets vs liabilities
+• "my investments" — portfolio
+• "how much loan" — loan balances
+
+HISTORY
+• "last 5 transactions" — recent spending
+• "when did i pay unifi" — payment history
+
+MARKET
+• "gold" / "KLSE" / "BTC" — live price + signal
+
+Just type naturally — I'll understand most phrasings.`
 
 function fmt(n: number) { return n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 
@@ -422,16 +456,7 @@ Remaining: RM${fmt(remaining)}`)
     }
 
   } else {
-    await sendMessage(chatId, `I didn't understand that. Try:
-• "how much left" — balance
-• "how much loan" — loan summary
-• "my investments" — portfolio
-• "net worth" — assets vs liabilities
-• "gold" — live gold price + buy/sell signal
-• "when did i pay celcomdigi" — payment history
-• "last 5 transactions" — recent spending
-• "paid celcomdigi" — mark bill paid
-• "spent RM45 lunch" — log expense`)
+    await sendMessage(chatId, `I didn't understand that. Send /help to see everything I can do.\n\nQuick examples:\n• "spent RM45 lunch"\n• "topup RM100 to TnG"\n• "how much left"\n• "paid celcomdigi"\n• "net worth"`)
   }
 }
 
@@ -446,6 +471,11 @@ export async function POST(request: Request) {
   if (text.startsWith('/start')) {
     const code = text.split(' ')[1]?.trim()
     await handleLink(chatId, code)
+    return Response.json({ ok: true })
+  }
+
+  if (text === '/help' || text.toLowerCase() === 'help') {
+    await sendMessage(chatId, HELP_TEXT)
     return Response.json({ ok: true })
   }
 
