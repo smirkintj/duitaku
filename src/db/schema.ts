@@ -216,6 +216,15 @@ export const telegramLinkCodes = pgTable('telegram_link_codes', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
+export const investmentValueHistory = pgTable('investment_value_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  investmentId: uuid('investment_id').notNull().references(() => financeInvestments.id, { onDelete: 'cascade' }),
+  value: real('value').notNull(),
+  month: text('month').notNull(), // YYYY-MM
+  note: text('note'),
+  loggedAt: timestamp('logged_at').defaultNow().notNull(),
+})
+
 // Relations
 export const financeAccountsRelations = relations(financeAccounts, ({ many }) => ({
   transactions: many(financeTransactions),

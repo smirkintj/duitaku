@@ -567,6 +567,170 @@ function SetupWizard({
   )
 }
 
+// ─── Investment history panel ──────────────────────────────────────────────────
+interface ValueHistoryRow {
+  id: string
+  investmentId: string
+  value: number
+  month: string
+  note: string | null
+  loggedAt: string
+}
+
+function todayYYYYMM() {
+  const d = new Date()
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  return `${yyyy}-${mm}`
+}
+
+function InvestmentHistoryPanel({ inv, onValueUpdated }: { inv: Investment; onValueUpdated: () => void }) {
+  const [history, setHistory] = useState<ValueHistoryRow[]>([])
+  const [histLoading, setHistLoading] = useState(true)
+  const [logValue, setLogValue] = useState(String(inv.currentValue))
+  const [logMonth, setLogMonth] = useState(todayYYYYMM())
+  const [logNote, setLogNote] = useState('')
+  const [logSaving, setLogSaving] = useState(false)
+
+  const fetchHistory = useCallback(async () => {
+    setHistLoading(true)
+    const res = await fetch(`/api/investments/${inv.id}/history`)
+    if (res.ok) setHistory(await res.json())
+    setHistLoading(false)
+  }, [inv.id])
+
+  useEffect(() => { fetchHistory() }, [fetchHistory])
+
+  async function handleLog(e: React.FormEvent) {
+    e.preventDefault()
+    const val = parseFloat(logValue)
+    if (isNaN(val)) return
+    setLogSaving(true)
+    await fetch(`/api/investments/${inv.id}/history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: val, month: logMonth, note: logNote.trim() || undefined }),
+    })
+    setLogSaving(false)
+    setLogNote('')
+    await fetchHistory()
+    onValueUpdated()
+  }
+
+  // Chronological for sparkline, most-recent-first for list (already sorted desc by API)
+  const chronological = [...history].sort((a, b) => a.month.localeCompare(b.month))
+
+  // Sparkline
+  function renderSparkline(rows: ValueHistoryRow[]) {
+    if (rows.length < 2) return null
+    const W = 300
+    const H = 40
+    const vals = rows.map(r => r.value)
+    const min = Math.min(...vals)
+    const max = Math.max(...vals)
+    const range = max - min || 1
+    const pts = rows.map((r, i) => {
+      const x = (i / (rows.length - 1)) * W
+      const y = H - ((r.value - min) / range) * (H - 6) - 3
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    }).join(' ')
+    return (
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block', marginTop: 12 }}>
+        <polyline points={pts} fill="none" stroke="#a3e635" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  const monoSm: React.CSSProperties = { fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }
+
+  return (
+    <div style={{
+      background: '#0d0d0d',
+      border: '1px solid #1a1a1a',
+      borderTop: 'none',
+      borderRadius: '0 0 14px 14px',
+      padding: '16px 20px',
+    }}>
+      {/* Log value form */}
+      <form onSubmit={handleLog} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: '#5b5b59' }}>LOG VALUE</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: '#5b5b59' }}>CURRENT VALUE RM</span>
+            <input
+              type="number"
+              value={logValue}
+              onChange={e => setLogValue(e.target.value)}
+              min="0"
+              step="0.01"
+              required
+              style={{ width: 140, background: '#111', border: '1px solid #222', borderRadius: 6, padding: '6px 10px', fontSize: 12, color: '#f5f5f4', fontFamily: '"JetBrains Mono", monospace', outline: 'none', colorScheme: 'dark' }}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: '#5b5b59' }}>MONTH</span>
+            <input
+              type="text"
+              value={logMonth}
+              onChange={e => setLogMonth(e.target.value)}
+              placeholder="YYYY-MM"
+              pattern="\d{4}-\d{2}"
+              required
+              style={{ width: 100, background: '#111', border: '1px solid #222', borderRadius: 6, padding: '6px 10px', fontSize: 12, color: '#f5f5f4', fontFamily: '"JetBrains Mono", monospace', outline: 'none', colorScheme: 'dark' }}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 100 }}>
+            <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: '#5b5b59' }}>NOTE (OPTIONAL)</span>
+            <input
+              type="text"
+              value={logNote}
+              onChange={e => setLogNote(e.target.value)}
+              placeholder="e.g. dividend payout"
+              style={{ width: '100%', background: '#111', border: '1px solid #222', borderRadius: 6, padding: '6px 10px', fontSize: 12, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif', outline: 'none', colorScheme: 'dark', boxSizing: 'border-box' }}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={logSaving}
+            style={{ background: logSaving ? '#1a1a1a' : '#a3e635', color: logSaving ? '#5b5b59' : '#0d0d0d', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: logSaving ? 'default' : 'pointer', fontFamily: '"Geist", -apple-system, sans-serif', flexShrink: 0, alignSelf: 'flex-end' }}
+          >
+            {logSaving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </form>
+
+      {/* History list */}
+      {!histLoading && history.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: '#5b5b59', marginBottom: 6 }}>HISTORY</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {history.slice(0, 6).map((row, i) => {
+              // Compare to previous entry (next in desc-sorted array = older)
+              const prev = history[i + 1]
+              const delta = prev ? row.value - prev.value : null
+              const deltaColor = delta == null ? '#5b5b59' : delta >= 0 ? '#a3e635' : '#ef4444'
+              const deltaStr = delta == null ? '' : `${delta >= 0 ? '+' : '-'}RM ${Math.abs(delta).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              return (
+                <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', borderBottom: '1px solid #141414', flexWrap: 'wrap' }}>
+                  <span style={{ ...monoSm, color: '#7a7a78', flexShrink: 0, minWidth: 54 }}>{row.month}</span>
+                  <span style={{ ...monoSm, color: '#f5f5f4', flexShrink: 0 }}>RM {row.value.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  {row.note && <span style={{ ...monoSm, color: '#5b5b59', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.note}</span>}
+                  {deltaStr && <span style={{ ...monoSm, color: deltaColor, marginLeft: 'auto', flexShrink: 0 }}>{deltaStr}</span>}
+                </div>
+              )
+            })}
+          </div>
+          {/* Sparkline */}
+          {renderSparkline(chronological)}
+        </div>
+      )}
+      {histLoading && (
+        <div style={{ marginTop: 12, fontSize: 11, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace' }}>Loading history…</div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 export default function InvestmentsPage() {
   const [investments, setInvestments] = useState<Investment[]>([])
@@ -606,10 +770,8 @@ export default function InvestmentsPage() {
   const [kcApiPassphrase, setKcApiPassphrase] = useState('')
   const [kcSaving, setKcSaving] = useState(false)
 
-  // Quick inline value update
-  const [quickEditId, setQuickEditId] = useState<string | null>(null)
-  const [quickEditValue, setQuickEditValue] = useState('')
-  const [quickEditSaving, setQuickEditSaving] = useState(false)
+  // Expandable history panel
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -775,30 +937,6 @@ export default function InvestmentsPage() {
     setShowKucoinConfig(false)
     setKcApiKey(''); setKcApiSecret(''); setKcApiPassphrase('')
     await checkKucoin()
-  }
-
-  function openQuickEdit(inv: Investment) {
-    setQuickEditId(inv.id)
-    setQuickEditValue(String(inv.currentValue))
-  }
-
-  function closeQuickEdit() {
-    setQuickEditId(null)
-    setQuickEditValue('')
-  }
-
-  async function handleQuickEditSave(id: string) {
-    const val = Number(quickEditValue)
-    if (isNaN(val)) return
-    setQuickEditSaving(true)
-    await fetch(`/api/investments/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ currentValue: val }),
-    })
-    setQuickEditSaving(false)
-    closeQuickEdit()
-    await load()
   }
 
   const totalCostBasis = investments.reduce((a, b) => a + b.costBasis, 0)
@@ -1090,11 +1228,11 @@ export default function InvestmentsPage() {
                   const gainColor = gain >= 0 ? '#a3e635' : '#ef4444'
                   const typeColor = TYPE_COLORS[inv.type] ?? '#6b7280'
                   const typeLabel = TYPE_LABELS[inv.type] ?? inv.type.toUpperCase()
-                  const isQuickEdit = quickEditId === inv.id
+                  const isExpanded = expandedId === inv.id
 
                   return (
                     <div key={inv.id} style={{ display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: isQuickEdit ? '14px 14px 0 0' : 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: isExpanded ? '14px 14px 0 0' : 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
                         {/* Card header */}
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1132,18 +1270,16 @@ export default function InvestmentsPage() {
                             )}
                           </div>
                           <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                            {/* Quick value update button */}
+                            {/* Expand / collapse history panel */}
                             <button
-                              onClick={() => isQuickEdit ? closeQuickEdit() : openQuickEdit(inv)}
-                              title="Quick update value"
-                              style={{ background: isQuickEdit ? 'rgba(163,230,53,0.1)' : 'transparent', border: 'none', cursor: 'pointer', color: isQuickEdit ? '#a3e635' : '#3a3a3a', padding: 4, borderRadius: 6 }}
-                              onMouseEnter={e => { if (!isQuickEdit) e.currentTarget.style.color = '#a3e635' }}
-                              onMouseLeave={e => { if (!isQuickEdit) e.currentTarget.style.color = '#3a3a3a' }}
+                              onClick={() => setExpandedId(expandedId === inv.id ? null : inv.id)}
+                              title="Value history"
+                              style={{ background: expandedId === inv.id ? 'rgba(163,230,53,0.1)' : 'transparent', border: 'none', cursor: 'pointer', color: expandedId === inv.id ? '#a3e635' : '#3a3a3a', padding: 4, borderRadius: 6, transition: 'color 0.15s' }}
+                              onMouseEnter={e => { if (expandedId !== inv.id) e.currentTarget.style.color = '#a3e635' }}
+                              onMouseLeave={e => { if (expandedId !== inv.id) e.currentTarget.style.color = '#3a3a3a' }}
                             >
-                              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M12 20h9" />
-                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                                <path d="M15 6l3 3" />
+                              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ transform: expandedId === inv.id ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                                <polyline points="6 9 12 15 18 9" />
                               </svg>
                             </button>
                             {!inv.autoSync && (
@@ -1223,81 +1359,9 @@ export default function InvestmentsPage() {
                         </div>
                       </div>
 
-                      {/* Quick edit inline row */}
-                      {isQuickEdit && (
-                        <div style={{
-                          background: '#0d0d0d',
-                          border: '1px solid #1a1a1a',
-                          borderTop: 'none',
-                          borderRadius: '0 0 14px 14px',
-                          padding: '10px 20px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          flexWrap: 'wrap',
-                        }}>
-                          <span style={{ fontSize: 9, ...S.mono, letterSpacing: '0.08em', color: '#5b5b59', flexShrink: 0 }}>UPDATE CURRENT VALUE</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-                            <span style={{ fontSize: 12, color: '#7a7a78', ...S.mono, flexShrink: 0 }}>RM</span>
-                            <input
-                              type="number"
-                              value={quickEditValue}
-                              onChange={e => setQuickEditValue(e.target.value)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') handleQuickEditSave(inv.id)
-                                if (e.key === 'Escape') closeQuickEdit()
-                              }}
-                              min="0"
-                              step="0.01"
-                              autoFocus
-                              style={{
-                                width: 160,
-                                background: '#111',
-                                border: '1px solid #222',
-                                borderRadius: 6,
-                                padding: '6px 10px',
-                                fontSize: 12,
-                                color: '#f5f5f4',
-                                fontFamily: '"JetBrains Mono", monospace',
-                                outline: 'none',
-                                colorScheme: 'dark',
-                              }}
-                            />
-                          </div>
-                          <button
-                            onClick={() => handleQuickEditSave(inv.id)}
-                            disabled={quickEditSaving}
-                            style={{
-                              background: quickEditSaving ? '#1a1a1a' : '#a3e635',
-                              color: quickEditSaving ? '#5b5b59' : '#0d0d0d',
-                              border: 'none',
-                              borderRadius: 6,
-                              padding: '6px 12px',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              cursor: quickEditSaving ? 'default' : 'pointer',
-                              ...S.sans,
-                              flexShrink: 0,
-                            }}
-                          >
-                            {quickEditSaving ? 'Saving…' : 'Save'}
-                          </button>
-                          <button
-                            onClick={closeQuickEdit}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontSize: 11,
-                              color: '#5b5b59',
-                              ...S.sans,
-                              padding: '6px 4px',
-                              flexShrink: 0,
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
+                      {/* Expandable history panel */}
+                      {isExpanded && (
+                        <InvestmentHistoryPanel inv={inv} onValueUpdated={load} />
                       )}
                     </div>
                   )
