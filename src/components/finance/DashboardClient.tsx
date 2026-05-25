@@ -18,9 +18,10 @@ interface DashboardClientProps {
   projectedRemaining: number
   daysLeft: number
   isNewUser?: boolean
+  onboardingStep?: number
 }
 
-export default function DashboardClient({ remaining, salary, month, cycleLabel, hasPaidThisMonth, salaryDefault, projectedRemaining, daysLeft, isNewUser }: DashboardClientProps) {
+export default function DashboardClient({ remaining, salary, month, cycleLabel, hasPaidThisMonth, salaryDefault, projectedRemaining, daysLeft, isNewUser, onboardingStep }: DashboardClientProps) {
   const [showPayday, setShowPayday] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [showAfford, setShowAfford] = useState(false)
@@ -40,7 +41,7 @@ export default function DashboardClient({ remaining, salary, month, cycleLabel, 
 
   return (
     <>
-      <OnboardingWizard isNewUser={isNewUser} />
+      <OnboardingWizard isNewUser={isNewUser} onboardingStep={onboardingStep} />
       <TopHeader
         remaining={remaining}
         salary={salary}

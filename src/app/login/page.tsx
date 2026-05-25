@@ -78,11 +78,17 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, textAlign: 'center', margin: '20px 0 0' }}>
-            No account?{' '}
-            <Link href="/register" style={{ color: '#a3e635', textDecoration: 'none', fontWeight: 500 }}>Create one</Link>
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+            <Link href="/forgot-password" style={{ fontSize: 13, color: '#5b5b59', ...S.sans, textDecoration: 'none' }}>Forgot password?</Link>
+            <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: 0 }}>
+              No account?{' '}
+              <Link href="/register" style={{ color: '#a3e635', textDecoration: 'none', fontWeight: 500 }}>Create one</Link>
+            </p>
+          </div>
         </div>
+        <p style={{ fontSize: 12, color: '#3a3a3a', ...S.sans, textAlign: 'center', margin: '16px 0 0' }}>
+          <Link href="/privacy" style={{ color: '#3a3a3a', textDecoration: 'none' }}>Privacy notice</Link>
+        </p>
       </div>
     </div>
   )

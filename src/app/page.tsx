@@ -68,7 +68,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const dayOfMonth = isCurrentCycle ? getDayInCycle(now, startDate, daysIn) : daysIn
 
   // Fetch in parallel
-  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth, ccAccountRows, investmentRows, loanRows, txCountRows] = await Promise.all([
+  const [salaryRows, monthTxs, categories, activeBills, activeBnpl, billPaymentsThisMonth, ccAccountRows, investmentRows, loanRows, txCountRows, accountCountRows] = await Promise.all([
     db
       .select()
       .from(financeSalary)
@@ -97,12 +97,15 @@ export default async function HomePage({ searchParams }: PageProps) {
     db.select({ id: financeInvestments.id }).from(financeInvestments).where(eq(financeInvestments.userId, userId)).limit(1),
     db.select({ id: financeLoans.id }).from(financeLoans).where(and(eq(financeLoans.userId, userId), eq(financeLoans.isActive, true))).limit(1),
     db.select({ total: count() }).from(financeTransactions).where(eq(financeTransactions.userId, userId)),
+    db.select({ total: count() }).from(financeAccounts).where(eq(financeAccounts.userId, userId)),
   ])
 
   const salaryDefault = salaryRows[0]?.amount ?? 0
   const totalTxCount = txCountRows[0]?.total ?? 0
-  // isNewUser: salary was set (we're past the setup card) but no transactions yet — truly a new user
-  const isNewUser = !!salaryRows[0] && totalTxCount === 0
+  const totalAccountCount = accountCountRows[0]?.total ?? 0
+  // Onboarding state: derived from real data, no flags needed
+  const onboardingStep = !salaryRows[0] ? 1 : totalAccountCount === 0 ? 2 : totalTxCount === 0 ? 3 : 0
+  const isNewUser = onboardingStep === 3
 
   // If no salary ever set, show first-time setup
   if (!salaryRows[0]) {
@@ -381,6 +384,7 @@ export default async function HomePage({ searchParams }: PageProps) {
           projectedRemaining={projectedRemaining}
           daysLeft={daysIn - dayOfMonth}
           isNewUser={isNewUser}
+          onboardingStep={onboardingStep}
         />
         <main
           style={{

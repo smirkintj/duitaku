@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 
 const COOKIE = 'duitaku_session'
-const PUBLIC_PATHS = ['/login', '/register', '/api/auth/login', '/api/auth/register']
+const PUBLIC_PATHS = [
+  '/login', '/register', '/forgot-password', '/reset-password', '/privacy',
+  '/api/auth/login', '/api/auth/register', '/api/auth/forgot-password', '/api/auth/reset-password',
+]
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
