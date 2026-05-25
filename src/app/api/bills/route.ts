@@ -15,7 +15,9 @@ export async function GET(request: Request) {
     .where(and(eq(financeBills.userId, userId), eq(financeBills.isActive, true)))
     .orderBy(asc(financeBills.dueDay))
 
-  if (!month) return Response.json(bills)
+  const safeBills = bills.map(({ userId: _, ...r }) => r)
+
+  if (!month) return Response.json(safeBills)
 
   // financeBillPayments doesn't have userId — derive security from billId ownership
   const billIds = bills.map(b => b.id)
@@ -26,7 +28,7 @@ export async function GET(request: Request) {
     : []
   const paidIds = new Set(payments.map(p => p.billId))
 
-  return Response.json(bills.map(b => ({ ...b, paid: paidIds.has(b.id) })))
+  return Response.json(safeBills.map(b => ({ ...b, paid: paidIds.has(b.id) })))
 }
 
 export async function POST(request: Request) {

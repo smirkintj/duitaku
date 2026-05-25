@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const investments = await db.select().from(financeInvestments)
     .where(eq(financeInvestments.userId, userId))
     .orderBy(desc(financeInvestments.createdAt))
-  return Response.json(investments)
+  return Response.json(investments.map(({ userId: _, ...r }) => r))
 }
 
 export async function POST(request: Request) {

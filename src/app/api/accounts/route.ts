@@ -19,11 +19,12 @@ export async function GET(request: Request) {
     : []
 
   const result = accounts.map((account) => {
-    if (account.type !== 'credit') return { ...account, latestStatement: null, statements: [] }
+    const { userId: _, ...accountData } = account
+    if (account.type !== 'credit') return { ...accountData, latestStatement: null, statements: [] }
     const acctStmts = statements
       .filter((s) => s.accountId === account.id)
       .sort((a, b) => b.month.localeCompare(a.month))
-    return { ...account, latestStatement: acctStmts[0] ?? null, statements: acctStmts }
+    return { ...accountData, latestStatement: acctStmts[0] ?? null, statements: acctStmts }
   })
 
   return Response.json(result)
