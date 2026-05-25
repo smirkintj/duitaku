@@ -43,7 +43,7 @@ export default function NetWorthWidget({ month: _month }: NetWorthWidgetProps) {
 
   if (loading) {
     return (
-      <div style={{ margin: '0 32px', background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '16px 20px' }}>
+      <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '16px 20px' }}>
         <span style={S.label}>LOADING NET WORTH…</span>
       </div>
     )
@@ -58,7 +58,7 @@ export default function NetWorthWidget({ month: _month }: NetWorthWidgetProps) {
   const liabPct = 100 - assetsPct
 
   return (
-    <div style={{ margin: '0 32px 0', background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '18px 24px' }}>
+    <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '18px 24px' }}>
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 14 }}>
         {/* Left: label + net worth number */}

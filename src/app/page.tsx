@@ -441,9 +441,10 @@ export default async function HomePage({ searchParams }: PageProps) {
             flexDirection: 'column',
             gap: 16,
             flex: 1,
-            maxWidth: 1500,
+            maxWidth: 1400,
             width: '100%',
             boxSizing: 'border-box',
+            margin: '0 auto',
           }}
         >
           <SetupNudge nudges={activeNudges} total={allNudges.length} />
@@ -452,50 +453,50 @@ export default async function HomePage({ searchParams }: PageProps) {
 
           <RecurringSuggestions />
 
-          <NetWorthWidget month={monthStr} />
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(0, 1fr)', gap: 16 }}>
-            <HeroRemaining
-              remaining={remaining}
-              salary={salary}
-              spent={spent}
-              committedTotal={committedTotal}
-              variableSpent={variableSpent}
-              daysIn={daysIn}
-              dayOfMonth={dayOfMonth}
-              dailySpend={dailySpend}
-              month={monthStr}
-            />
-            <StatsColumn
-              income={income}
-              committedTotal={committedTotal}
-              committedBills={committedBills}
-              committedBnpl={committedBnpl}
-              billsPaidCount={billsPaidCount}
-              billsCashCount={billsCashCount}
-              ccBillsCount={ccBillsCount}
-              variableSpent={variableSpent}
-              ccCharges={ccCharges}
-              remaining={remaining}
-              saved={saved}
-              dayOfMonth={dayOfMonth}
-              daysIn={daysIn}
-              projectedRemaining={projectedRemaining}
-              isCurrentCycle={isCurrentCycle}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(0, 1fr)', gap: 16 }}>
-            <CategoriesBlock categories={categoryStats} month={monthStr} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+            {/* Left column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <HeroRemaining
+                remaining={remaining}
+                salary={salary}
+                spent={spent}
+                committedTotal={committedTotal}
+                variableSpent={variableSpent}
+                daysIn={daysIn}
+                dayOfMonth={dayOfMonth}
+                dailySpend={dailySpend}
+                month={monthStr}
+              />
+              <CategoriesBlock categories={categoryStats} month={monthStr} />
+            </div>
+
+            {/* Right column */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <NetWorthWidget month={monthStr} />
+              <StatsColumn
+                income={income}
+                committedTotal={committedTotal}
+                committedBills={committedBills}
+                committedBnpl={committedBnpl}
+                billsPaidCount={billsPaidCount}
+                billsCashCount={billsCashCount}
+                ccBillsCount={ccBillsCount}
+                variableSpent={variableSpent}
+                ccCharges={ccCharges}
+                remaining={remaining}
+                saved={saved}
+                dayOfMonth={dayOfMonth}
+                daysIn={daysIn}
+                projectedRemaining={projectedRemaining}
+                isCurrentCycle={isCurrentCycle}
+              />
               <RecentTransactions transactions={recentTxs} />
               {savingsGoals.filter(g => g.targetAmount && g.targetAmount > 0).length > 0 && (
                 <UpcomingGoals goals={savingsGoals.filter(g => g.targetAmount && g.targetAmount > 0)} />
               )}
+              <AICoachCard month={monthStr} />
             </div>
           </div>
-
-          <AICoachCard month={monthStr} />
         </main>
       </div>
     </div>
