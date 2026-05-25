@@ -103,9 +103,14 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
   let parsed: ParsedIntent = { intent: 'unknown' }
   const lower = text.toLowerCase()
 
+  if (lower === 'how much' || lower === 'berapa' || lower === 'baki') {
+    await sendMessage(chatId, `How much what?\n• "how much left" — this month's balance\n• "how much loan" — loan summary\n• "my investments" — portfolio\n• "net worth" — total assets vs liabilities`)
+    return
+  }
+
   if (['how much left', 'baki', 'check balance', 'how much do i have', 'remaining this month'].some(k => lower.includes(k))) {
     parsed = { intent: 'check_balance' }
-  } else if (['berapa', 'balance'].some(k => lower === k || lower.startsWith(k + ' '))) {
+  } else if (['balance'].some(k => lower === k || lower.startsWith(k + ' '))) {
     parsed = { intent: 'check_balance' }
   } else if (['how much loan', 'my loan', 'my debt', 'hutang', 'loan balance', 'berapa hutang', 'outstanding loan'].some(k => lower.includes(k))) {
     parsed = { intent: 'check_loans' }
