@@ -3,7 +3,7 @@ import { financeTransactions, financeCategories, financeSalary, financeBills, fi
 import { and, gte, lte, desc, eq, inArray } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
-import { fetchGoldInsight } from '@/lib/market-data'
+import { fetchAssetInsight, investmentTypesToAssets } from '@/lib/market-data'
 
 interface CoachData {
   focus: { area: string; verdict: string; detail: string }
@@ -65,10 +65,8 @@ export async function POST(request: Request) {
 
   const { start, end } = monthRange(month)
 
-  // Fetch all data in parallel (including live gold price for market context)
   const prior3 = prevMonths(month, 3)
-  const [goldInsight, [salary, currentTxs, categories, bills, billPayments, bnplPlans, savingsGoals, accounts, investments]] = await Promise.all([
-    fetchGoldInsight(),
+  const [[salary, currentTxs, categories, bills, billPayments, bnplPlans, savingsGoals, accounts, investments]] = await Promise.all([
     Promise.all([
     db.select().from(financeSalary).where(eq(financeSalary.userId, userId)).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
     db.select().from(financeTransactions)
@@ -82,6 +80,12 @@ export async function POST(request: Request) {
     db.select().from(financeInvestments).where(eq(financeInvestments.userId, userId)),
   ]),
   ])
+
+  // Fetch live prices for assets the user actually holds
+  const assetsToFetch = investmentTypesToAssets(investments.map(i => ({ name: i.name, type: i.type, ticker: i.ticker })))
+  const marketInsights = (await Promise.all(
+    assetsToFetch.slice(0, 5).map(a => fetchAssetInsight(a.ticker, a.label, a.currency, a.isMYR))
+  )).filter((i): i is NonNullable<typeof i> => i !== null)
 
   const priorTxsArr = await Promise.all(
     prior3.map(({ start: s, end: e }) =>
@@ -225,13 +229,10 @@ ${ccSummary.map((c) => `- ${c.name}: RM ${(c.outstanding ?? 0).toFixed(2)} outst
 INVESTMENTS (total: RM ${totalInvestmentValue.toFixed(2)}, ${investmentGainPct !== null ? `${Number(investmentGainPct) >= 0 ? '+' : ''}${investmentGainPct}% overall return` : 'no cost basis set'}):
 ${investmentSummary.join('\n') || '- No investments recorded'}
 Investment-to-salary ratio: ${salaryAmount > 0 ? (totalInvestmentValue / salaryAmount).toFixed(1) : 'n/a'}x monthly salary
-${goldInsight ? `
-LIVE MARKET CONTEXT (gold spot price fetched now):
-- Gold: RM ${goldInsight.priceMYR.toFixed(2)}/g (USD ${goldInsight.priceUSD.toFixed(0)}/oz), USD/MYR ${goldInsight.usdmyr.toFixed(4)}
-- 30-day range: RM ${goldInsight.low30d.toFixed(2)} – RM ${goldInsight.high30d.toFixed(2)}
-- 30-day change: ${goldInsight.change30d >= 0 ? '+' : ''}${goldInsight.change30d.toFixed(2)}%
-- Signal: ${goldInsight.signal.toUpperCase()} — ${goldInsight.signalReason}
-Use this to comment on gold investments if the user holds any, or suggest gold as an option if they have excess savings.` : ''}
+${marketInsights.length > 0 ? `
+LIVE MARKET CONTEXT (fetched now for assets this user holds):
+${marketInsights.map(i => `- ${i.label}: ${i.currency} ${i.price.toLocaleString('en', { maximumFractionDigits: 2 })}${i.priceMYR != null ? ` (RM ${i.priceMYR.toFixed(2)}${i.ticker === 'GC=F' || i.ticker === 'SI=F' ? '/g' : ''})` : ''}, 30d change ${i.change30d >= 0 ? '+' : ''}${i.change30d.toFixed(1)}%, signal: ${i.signal.toUpperCase()} — ${i.signalReason}`).join('\n')}
+Reference current market conditions when advising on these holdings.` : ''}
 
 SAVINGS GOALS:
 ${savingsSummary.map((g) => `- ${g.name}: RM ${g.current.toFixed(2)}${g.target ? ` / RM ${g.target.toFixed(2)} (${g.pct}%)` : ''}`).join('\n') || '- None set'}

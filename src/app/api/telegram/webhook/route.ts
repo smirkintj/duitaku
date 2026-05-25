@@ -15,7 +15,7 @@ import {
 } from '@/db/schema'
 import { and, eq, gte, lte, desc } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
-import { fetchGoldInsight, goldSignalEmoji } from '@/lib/market-data'
+import { fetchAssetInsight, investmentTypesToAssets, resolveAsset, signalEmoji } from '@/lib/market-data'
 
 interface TelegramChat { id: number }
 interface TelegramMessage { text?: string; chat?: TelegramChat }
@@ -116,10 +116,8 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
     parsed = { intent: 'check_balance' }
   } else if (['how much loan', 'my loan', 'my debt', 'hutang', 'loan balance', 'berapa hutang', 'outstanding loan'].some(k => lower.includes(k))) {
     parsed = { intent: 'check_loans' }
-  } else if (['gold price', 'harga emas', 'emas sekarang', 'should i buy gold', 'should i sell gold', 'gold signal', 'buy gold', 'sell gold', 'market insight', 'pasaran emas'].some(k => lower.includes(k))) {
-    parsed = { intent: 'market_insights' }
-  } else if (lower === 'gold' || lower === 'emas' || lower === 'market') {
-    parsed = { intent: 'market_insights' }
+  } else if (['price', 'signal', 'market', 'pasaran', 'harga'].some(k => lower.includes(k)) || resolveAsset(lower) !== null) {
+    parsed = { intent: 'market_insights', query: lower }
   } else if (['my investment', 'investment', 'portfolio', 'epf', 'amanah saham', 'asb', 'unit trust', 'berapa invest'].some(k => lower.includes(k))) {
     parsed = { intent: 'check_investments' }
   } else if (['net worth', 'total assets', 'kekayaan', 'berapa kaya'].some(k => lower.includes(k))) {
@@ -202,32 +200,36 @@ Return one of:
     await sendMessage(chatId, `🏦 <b>Loans</b>\n${lines}\n\n<b>Total outstanding: RM${fmt(total)}</b>`)
 
   } else if (parsed.intent === 'market_insights') {
-    await sendMessage(chatId, '⏳ Fetching live gold price...')
-    const gold = await fetchGoldInsight()
-    if (!gold) {
-      await sendMessage(chatId, '⚠️ Could not fetch live market data right now. Try again in a moment.')
+    const query = (parsed.query ?? '').replace(/price|signal|harga|pasaran/gi, '').trim()
+    const resolved = resolveAsset(query)
+    if (!resolved) {
+      await sendMessage(chatId, 'What asset? Try: "bitcoin price", "KLCI", "gold", "oil", "USD/MYR", or a Bursa stock code like "1155" (Maybank).')
       return
     }
-    const emoji = goldSignalEmoji(gold.signal)
-    const signalLabel = gold.signal.toUpperCase()
-    await sendMessage(chatId, `🥇 <b>Gold (XAU) — Live</b>
+    await sendMessage(chatId, `⏳ Fetching ${resolved.label}...`)
+    const insight = await fetchAssetInsight(resolved.ticker, resolved.label, resolved.currency, resolved.isMYR)
+    if (!insight) {
+      await sendMessage(chatId, `⚠️ Couldn't fetch data for ${resolved.label}. Try again in a moment.`)
+      return
+    }
+    const e = signalEmoji(insight.signal)
+    const priceStr = insight.priceMYR != null
+      ? `RM${fmt(insight.priceMYR)}${insight.ticker === 'GC=F' || insight.ticker === 'SI=F' ? '/g' : ''}  ·  ${insight.currency} ${insight.price.toLocaleString('en', { maximumFractionDigits: 2 })}`
+      : `${insight.currency} ${insight.price.toLocaleString('en', { maximumFractionDigits: 2 })}`
+    await sendMessage(chatId, `<b>${insight.label} — Live</b>
 
-<b>RM${fmt(gold.priceMYR)}/g</b>  ·  USD ${gold.priceUSD.toFixed(0)}/oz
-USD/MYR: ${gold.usdmyr.toFixed(4)}
+<b>${priceStr}</b>
 
-30-day range: RM${fmt(gold.low30d)} – RM${fmt(gold.high30d)}
-30-day change: ${gold.change30d >= 0 ? '+' : ''}${gold.change30d.toFixed(2)}%
+30-day range: ${insight.currency} ${insight.low30d.toLocaleString('en', { maximumFractionDigits: 2 })} – ${insight.high30d.toLocaleString('en', { maximumFractionDigits: 2 })}
+30-day change: ${insight.change30d >= 0 ? '+' : ''}${insight.change30d.toFixed(2)}%
 
-${emoji} <b>Signal: ${signalLabel}</b>
-${gold.signalReason}
+${e} <b>${insight.signal.toUpperCase()}</b>
+${insight.signalReason}
 
-<i>Not financial advice. Always do your own research.</i>`)
+<i>Not financial advice. Do your own research.</i>`)
 
   } else if (parsed.intent === 'check_investments') {
-    const [investments, gold] = await Promise.all([
-      db.select().from(financeInvestments).where(eq(financeInvestments.userId, userId)),
-      fetchGoldInsight(),
-    ])
+    const investments = await db.select().from(financeInvestments).where(eq(financeInvestments.userId, userId))
     if (investments.length === 0) {
       await sendMessage(chatId, 'No investments recorded yet.')
       return
@@ -237,13 +239,19 @@ ${gold.signalReason}
     const gain = totalValue - totalCost
     const lines = investments.map(i => `• ${i.name} (${i.type}): RM${fmt(i.currentValue)}`).join('\n')
 
-    const hasGold = investments.some(i => ['gold', 'emas', 'public gold', 'maybank gold'].some(k => i.name.toLowerCase().includes(k) || i.type.toLowerCase().includes(k)))
-    let marketNote = ''
-    if (gold) {
-      const emoji = goldSignalEmoji(gold.signal)
-      marketNote = `\n\n🥇 <b>Gold market:</b> RM${fmt(gold.priceMYR)}/g ${emoji} ${gold.signal.toUpperCase()}${hasGold ? '\n' + gold.signalReason : ''}`
+    // Fetch live prices for assets the user actually holds
+    const assetsToFetch = investmentTypesToAssets(investments.map(i => ({ name: i.name, type: i.type, ticker: i.ticker })))
+    const marketLines: string[] = []
+    if (assetsToFetch.length > 0) {
+      const insights = await Promise.all(assetsToFetch.slice(0, 4).map(a => fetchAssetInsight(a.ticker, a.label, a.currency, a.isMYR)))
+      for (const ins of insights) {
+        if (!ins) continue
+        const e = signalEmoji(ins.signal)
+        const p = ins.priceMYR != null ? `RM${fmt(ins.priceMYR)}${ins.ticker === 'GC=F' || ins.ticker === 'SI=F' ? '/g' : ''}` : `${ins.currency} ${ins.price.toLocaleString('en', { maximumFractionDigits: 2 })}`
+        marketLines.push(`${e} ${ins.label}: ${p} (${ins.change30d >= 0 ? '+' : ''}${ins.change30d.toFixed(1)}% 30d) — ${ins.signal.toUpperCase()}`)
+      }
     }
-
+    const marketNote = marketLines.length > 0 ? `\n\n📡 <b>Live market</b>\n${marketLines.join('\n')}` : ''
     await sendMessage(chatId, `📈 <b>Investments</b>\n${lines}\n\n<b>Total: RM${fmt(totalValue)}</b> (${gain >= 0 ? '+' : ''}RM${fmt(gain)} gain)${marketNote}`)
 
   } else if (parsed.intent === 'check_net_worth') {
