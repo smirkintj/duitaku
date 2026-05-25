@@ -3,6 +3,7 @@ import { financeTransactions, financeCategories, financeSalary, financeBills, fi
 import { and, gte, lte, desc, eq, inArray } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
+import { fetchGoldInsight } from '@/lib/market-data'
 
 interface CoachData {
   focus: { area: string; verdict: string; detail: string }
@@ -64,9 +65,11 @@ export async function POST(request: Request) {
 
   const { start, end } = monthRange(month)
 
-  // Fetch all data in parallel
+  // Fetch all data in parallel (including live gold price for market context)
   const prior3 = prevMonths(month, 3)
-  const [salary, currentTxs, categories, bills, billPayments, bnplPlans, savingsGoals, accounts, investments] = await Promise.all([
+  const [goldInsight, [salary, currentTxs, categories, bills, billPayments, bnplPlans, savingsGoals, accounts, investments]] = await Promise.all([
+    fetchGoldInsight(),
+    Promise.all([
     db.select().from(financeSalary).where(eq(financeSalary.userId, userId)).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
     db.select().from(financeTransactions)
       .where(and(eq(financeTransactions.userId, userId), gte(financeTransactions.date, start), lte(financeTransactions.date, end))),
@@ -77,6 +80,7 @@ export async function POST(request: Request) {
     db.select().from(financeSavingsGoals).where(eq(financeSavingsGoals.userId, userId)),
     db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId)),
     db.select().from(financeInvestments).where(eq(financeInvestments.userId, userId)),
+  ]),
   ])
 
   const priorTxsArr = await Promise.all(
@@ -221,6 +225,13 @@ ${ccSummary.map((c) => `- ${c.name}: RM ${(c.outstanding ?? 0).toFixed(2)} outst
 INVESTMENTS (total: RM ${totalInvestmentValue.toFixed(2)}, ${investmentGainPct !== null ? `${Number(investmentGainPct) >= 0 ? '+' : ''}${investmentGainPct}% overall return` : 'no cost basis set'}):
 ${investmentSummary.join('\n') || '- No investments recorded'}
 Investment-to-salary ratio: ${salaryAmount > 0 ? (totalInvestmentValue / salaryAmount).toFixed(1) : 'n/a'}x monthly salary
+${goldInsight ? `
+LIVE MARKET CONTEXT (gold spot price fetched now):
+- Gold: RM ${goldInsight.priceMYR.toFixed(2)}/g (USD ${goldInsight.priceUSD.toFixed(0)}/oz), USD/MYR ${goldInsight.usdmyr.toFixed(4)}
+- 30-day range: RM ${goldInsight.low30d.toFixed(2)} – RM ${goldInsight.high30d.toFixed(2)}
+- 30-day change: ${goldInsight.change30d >= 0 ? '+' : ''}${goldInsight.change30d.toFixed(2)}%
+- Signal: ${goldInsight.signal.toUpperCase()} — ${goldInsight.signalReason}
+Use this to comment on gold investments if the user holds any, or suggest gold as an option if they have excess savings.` : ''}
 
 SAVINGS GOALS:
 ${savingsSummary.map((g) => `- ${g.name}: RM ${g.current.toFixed(2)}${g.target ? ` / RM ${g.target.toFixed(2)} (${g.pct}%)` : ''}`).join('\n') || '- None set'}

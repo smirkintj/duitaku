@@ -15,6 +15,7 @@ import {
 } from '@/db/schema'
 import { and, eq, gte, lte, desc } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
+import { fetchGoldInsight, goldSignalEmoji } from '@/lib/market-data'
 
 interface TelegramChat { id: number }
 interface TelegramMessage { text?: string; chat?: TelegramChat }
@@ -23,7 +24,7 @@ interface TelegramUpdate { message?: TelegramMessage }
 interface ParsedIntent {
   intent: 'mark_bill_paid' | 'add_expense' | 'add_income' | 'check_balance' |
           'check_loans' | 'check_investments' | 'check_net_worth' |
-          'payment_history' | 'recent_transactions' | 'unknown'
+          'payment_history' | 'recent_transactions' | 'market_insights' | 'unknown'
   billId?: string
   billName?: string
   amount?: number
@@ -77,6 +78,7 @@ You can ask me:
 • "how much loan" — loan summary
 • "my investments" — investment portfolio
 • "net worth" — assets vs liabilities
+• "gold" or "gold price" — live gold price + signal
 • "when did i pay celcomdigi" — payment history
 • "last 5 transactions" — recent spending`)
 }
@@ -114,6 +116,10 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
     parsed = { intent: 'check_balance' }
   } else if (['how much loan', 'my loan', 'my debt', 'hutang', 'loan balance', 'berapa hutang', 'outstanding loan'].some(k => lower.includes(k))) {
     parsed = { intent: 'check_loans' }
+  } else if (['gold price', 'harga emas', 'emas sekarang', 'should i buy gold', 'should i sell gold', 'gold signal', 'buy gold', 'sell gold', 'market insight', 'pasaran emas'].some(k => lower.includes(k))) {
+    parsed = { intent: 'market_insights' }
+  } else if (lower === 'gold' || lower === 'emas' || lower === 'market') {
+    parsed = { intent: 'market_insights' }
   } else if (['my investment', 'investment', 'portfolio', 'epf', 'amanah saham', 'asb', 'unit trust', 'berapa invest'].some(k => lower.includes(k))) {
     parsed = { intent: 'check_investments' }
   } else if (['net worth', 'total assets', 'kekayaan', 'berapa kaya'].some(k => lower.includes(k))) {
@@ -195,9 +201,33 @@ Return one of:
     const lines = loans.map(l => `• ${l.name}: RM${fmt(l.outstandingBalance)} (RM${fmt(l.monthlyInstallment)}/mo)`).join('\n')
     await sendMessage(chatId, `🏦 <b>Loans</b>\n${lines}\n\n<b>Total outstanding: RM${fmt(total)}</b>`)
 
+  } else if (parsed.intent === 'market_insights') {
+    await sendMessage(chatId, '⏳ Fetching live gold price...')
+    const gold = await fetchGoldInsight()
+    if (!gold) {
+      await sendMessage(chatId, '⚠️ Could not fetch live market data right now. Try again in a moment.')
+      return
+    }
+    const emoji = goldSignalEmoji(gold.signal)
+    const signalLabel = gold.signal.toUpperCase()
+    await sendMessage(chatId, `🥇 <b>Gold (XAU) — Live</b>
+
+<b>RM${fmt(gold.priceMYR)}/g</b>  ·  USD ${gold.priceUSD.toFixed(0)}/oz
+USD/MYR: ${gold.usdmyr.toFixed(4)}
+
+30-day range: RM${fmt(gold.low30d)} – RM${fmt(gold.high30d)}
+30-day change: ${gold.change30d >= 0 ? '+' : ''}${gold.change30d.toFixed(2)}%
+
+${emoji} <b>Signal: ${signalLabel}</b>
+${gold.signalReason}
+
+<i>Not financial advice. Always do your own research.</i>`)
+
   } else if (parsed.intent === 'check_investments') {
-    const investments = await db.select().from(financeInvestments)
-      .where(eq(financeInvestments.userId, userId))
+    const [investments, gold] = await Promise.all([
+      db.select().from(financeInvestments).where(eq(financeInvestments.userId, userId)),
+      fetchGoldInsight(),
+    ])
     if (investments.length === 0) {
       await sendMessage(chatId, 'No investments recorded yet.')
       return
@@ -206,7 +236,15 @@ Return one of:
     const totalCost = investments.reduce((s, i) => s + i.costBasis, 0)
     const gain = totalValue - totalCost
     const lines = investments.map(i => `• ${i.name} (${i.type}): RM${fmt(i.currentValue)}`).join('\n')
-    await sendMessage(chatId, `📈 <b>Investments</b>\n${lines}\n\n<b>Total: RM${fmt(totalValue)}</b> (${gain >= 0 ? '+' : ''}RM${fmt(gain)} gain)`)
+
+    const hasGold = investments.some(i => ['gold', 'emas', 'public gold', 'maybank gold'].some(k => i.name.toLowerCase().includes(k) || i.type.toLowerCase().includes(k)))
+    let marketNote = ''
+    if (gold) {
+      const emoji = goldSignalEmoji(gold.signal)
+      marketNote = `\n\n🥇 <b>Gold market:</b> RM${fmt(gold.priceMYR)}/g ${emoji} ${gold.signal.toUpperCase()}${hasGold ? '\n' + gold.signalReason : ''}`
+    }
+
+    await sendMessage(chatId, `📈 <b>Investments</b>\n${lines}\n\n<b>Total: RM${fmt(totalValue)}</b> (${gain >= 0 ? '+' : ''}RM${fmt(gain)} gain)${marketNote}`)
 
   } else if (parsed.intent === 'check_net_worth') {
     const [accounts, investments, loans] = await Promise.all([
@@ -314,6 +352,7 @@ Return one of:
 • "how much loan" — loan summary
 • "my investments" — portfolio
 • "net worth" — assets vs liabilities
+• "gold" — live gold price + buy/sell signal
 • "when did i pay celcomdigi" — payment history
 • "last 5 transactions" — recent spending
 • "paid celcomdigi" — mark bill paid
