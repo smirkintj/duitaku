@@ -231,46 +231,43 @@ function AssetCard({ insight }: { insight: AssetInsight }) {
 }
 
 // ─── Market Pulse section ──────────────────────────────────────────────────────
-function MarketPulseSection({ prefs, investments }: { prefs: InvestPrefs; investments: Investment[] }) {
+function MarketPulseSection({ prefs, investments, enabled }: { prefs: InvestPrefs; investments: Investment[]; enabled: boolean }) {
   const [insights, setInsights] = useState<AssetInsight[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [failed, setFailed] = useState(false)
 
   const hasLiveTypes = prefs.trackedTypes.some(t => LIVE_TYPES.includes(t))
-  const active = prefs.showMarketPulse && hasLiveTypes
+  const active = enabled && prefs.showMarketPulse && hasLiveTypes
 
   useEffect(() => {
     if (!active) return
     let cancelled = false
     async function fetch_() {
       setLoading(true)
-      // Filter investments to only those matching tracked live types
-      const filtered = investments.filter(inv => LIVE_TYPES.includes(inv.type) && prefs.trackedTypes.includes(inv.type))
-      const assets = investmentTypesToAssets(filtered)
-
-      // Also add watchlist tickers if showMarketPulse
-      const watchlistAssets = prefs.watchlist.flatMap(ticker => {
-        const resolved = resolveAsset(ticker)
-        return resolved ? [resolved] : []
-      })
-
-      // Deduplicate
-      const seen = new Set(assets.map(a => a.ticker))
-      const allAssets = [...assets]
-      for (const wa of watchlistAssets) {
-        if (!seen.has(wa.ticker)) {
-          seen.add(wa.ticker)
-          allAssets.push(wa)
+      setFailed(false)
+      try {
+        const filtered = investments.filter(inv => LIVE_TYPES.includes(inv.type) && prefs.trackedTypes.includes(inv.type))
+        const assets = investmentTypesToAssets(filtered)
+        const watchlistAssets = prefs.watchlist.flatMap(ticker => {
+          const resolved = resolveAsset(ticker)
+          return resolved ? [resolved] : []
+        })
+        const seen = new Set(assets.map(a => a.ticker))
+        const allAssets = [...assets]
+        for (const wa of watchlistAssets) {
+          if (!seen.has(wa.ticker)) { seen.add(wa.ticker); allAssets.push(wa) }
         }
-      }
-
-      const results = await Promise.all(
-        allAssets.map(a => fetchAssetInsight(a.ticker, a.label, a.currency, a.isMYR))
-      )
-      if (!cancelled) {
-        setInsights(results.filter((r): r is AssetInsight => r !== null))
-        setLastUpdated(new Date())
-        setLoading(false)
+        const results = await Promise.all(
+          allAssets.map(a => fetchAssetInsight(a.ticker, a.label, a.currency, a.isMYR))
+        )
+        if (!cancelled) {
+          setInsights(results.filter((r): r is AssetInsight => r !== null))
+          setLastUpdated(new Date())
+          setLoading(false)
+        }
+      } catch {
+        if (!cancelled) { setFailed(true); setLoading(false) }
       }
     }
     fetch_()
@@ -278,7 +275,8 @@ function MarketPulseSection({ prefs, investments }: { prefs: InvestPrefs; invest
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, prefs.trackedTypes, prefs.watchlist, investments])
 
-  if (!active) return null
+  // Hide entirely if disabled, not configured, failed, or returned nothing after load
+  if (!active || failed || (!loading && insights.length === 0)) return null
 
   return (
     <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '20px 24px' }}>
@@ -290,43 +288,45 @@ function MarketPulseSection({ prefs, investments }: { prefs: InvestPrefs; invest
       </div>
       {loading ? (
         <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>Loading market data…</div>
-      ) : insights.length === 0 ? (
-        <div style={{ fontSize: 13, color: '#5b5b59', ...S.sans, padding: '12px 0' }}>No market data available for tracked types.</div>
       ) : (
-        <div>
-          {insights.map(ins => <AssetCard key={ins.ticker} insight={ins} />)}
-        </div>
+        <div>{insights.map(ins => <AssetCard key={ins.ticker} insight={ins} />)}</div>
       )}
     </div>
   )
 }
 
 // ─── Watchlist section ─────────────────────────────────────────────────────────
-function WatchlistSection({ prefs, onPrefsChange }: { prefs: InvestPrefs; onPrefsChange: (p: InvestPrefs) => void }) {
+function WatchlistSection({ prefs, onPrefsChange, enabled }: { prefs: InvestPrefs; onPrefsChange: (p: InvestPrefs) => void; enabled: boolean }) {
   const [insights, setInsights] = useState<AssetInsight[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [addInput, setAddInput] = useState('')
   const [showAddInput, setShowAddInput] = useState(false)
+  const [failed, setFailed] = useState(false)
 
-  const active = prefs.showWatchlist && prefs.watchlist.length > 0
+  const active = enabled && prefs.showWatchlist && prefs.watchlist.length > 0
 
   useEffect(() => {
     if (!active) return
     let cancelled = false
     async function fetch_() {
       setLoading(true)
-      const results = await Promise.all(
-        prefs.watchlist.map(async (ticker) => {
-          const resolved = resolveAsset(ticker)
-          if (!resolved) return null
-          return fetchAssetInsight(resolved.ticker, resolved.label, resolved.currency, resolved.isMYR)
-        })
-      )
-      if (!cancelled) {
-        setInsights(results.filter((r): r is AssetInsight => r !== null))
-        setLastUpdated(new Date())
-        setLoading(false)
+      setFailed(false)
+      try {
+        const results = await Promise.all(
+          prefs.watchlist.map(async (ticker) => {
+            const resolved = resolveAsset(ticker)
+            if (!resolved) return null
+            return fetchAssetInsight(resolved.ticker, resolved.label, resolved.currency, resolved.isMYR)
+          })
+        )
+        if (!cancelled) {
+          setInsights(results.filter((r): r is AssetInsight => r !== null))
+          setLastUpdated(new Date())
+          setLoading(false)
+        }
+      } catch {
+        if (!cancelled) { setFailed(true); setLoading(false) }
       }
     }
     fetch_()
@@ -334,7 +334,7 @@ function WatchlistSection({ prefs, onPrefsChange }: { prefs: InvestPrefs; onPref
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, prefs.watchlist])
 
-  if (!active) return null
+  if (!active || failed || (!loading && insights.length === 0)) return null
 
   function addTicker() {
     const t = addInput.trim()
@@ -574,6 +574,7 @@ export default function InvestmentsPage() {
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [syncWarnings, setSyncWarnings] = useState<string[]>([])
+  const [flags, setFlags] = useState<Record<string, boolean>>({})
 
   // Prefs
   const [prefs, setPrefs] = useState<InvestPrefs>(DEFAULT_PREFS)
@@ -625,6 +626,12 @@ export default function InvestmentsPage() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { checkKucoin() }, [checkKucoin])
+  useEffect(() => {
+    fetch('/api/feature-flags')
+      .then(r => r.ok ? r.json() : {})
+      .then(setFlags)
+      .catch(() => {})
+  }, [])
 
   // Load prefs from localStorage once mounted
   useEffect(() => {
@@ -856,10 +863,10 @@ export default function InvestmentsPage() {
           </div>
 
           {/* Market Pulse */}
-          {!loading && <MarketPulseSection prefs={prefs} investments={investments} />}
+          {!loading && <MarketPulseSection prefs={prefs} investments={investments} enabled={flags.market_pulse !== false} />}
 
           {/* Watchlist */}
-          {!loading && <WatchlistSection prefs={prefs} onPrefsChange={setPrefs} />}
+          {!loading && <WatchlistSection prefs={prefs} onPrefsChange={setPrefs} enabled={flags.watchlist !== false} />}
 
           {/* KuCoin sync section */}
           <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '16px 20px' }}>

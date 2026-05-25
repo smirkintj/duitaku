@@ -38,14 +38,45 @@ const PATH_TO_KEY: Record<string, string> = {
   '/settings': 'settings',
 }
 
+// Map feature flag keys to sidebar nav item keys
+const FLAG_TO_NAV: Record<string, string> = {
+  nav_dashboard: 'dashboard',
+  nav_transactions: 'transactions',
+  nav_trends: 'trends',
+  nav_import: 'import',
+  nav_ai: 'ai',
+  nav_bills: 'bills',
+  nav_cashflow: 'cashflow',
+  nav_savings: 'savings',
+  nav_investments: 'investments',
+  nav_loans: 'loans',
+  nav_merchants: 'merchants',
+  nav_categories: 'categories',
+  nav_accounts: 'accounts',
+}
+
 export default function SidebarClient() {
   const router = useRouter()
   const pathname = usePathname()
   const [expanded, setExpanded] = useState(true)
   const [user, setUser] = useState<{ name?: string; email?: string } | null>(null)
+  const [disabledKeys, setDisabledKeys] = useState<string[]>([])
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => { if (d) setUser(d) })
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/feature-flags')
+      .then(r => r.ok ? r.json() : {})
+      .then((flags: Record<string, boolean>) => {
+        const disabled: string[] = []
+        for (const [flagKey, navKey] of Object.entries(FLAG_TO_NAV)) {
+          if (flags[flagKey] === false) disabled.push(navKey)
+        }
+        setDisabledKeys(disabled)
+      })
+      .catch(() => {})
   }, [])
 
   const active = PATH_TO_KEY[pathname] ?? 'dashboard'
@@ -74,6 +105,7 @@ export default function SidebarClient() {
       userName={user?.name}
       userEmail={user?.email}
       onLogout={handleLogout}
+      disabledKeys={disabledKeys}
     />
   )
 }

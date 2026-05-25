@@ -1,4 +1,10 @@
 import { pgTable, text, timestamp, integer, real, boolean, uuid, primaryKey } from 'drizzle-orm/pg-core'
+
+export const featureFlags = pgTable('feature_flags', {
+  key: text('key').primaryKey(),
+  enabled: boolean('enabled').default(true).notNull(),
+  label: text('label').notNull(),
+})
 import { relations } from 'drizzle-orm'
 
 export const users = pgTable('users', {

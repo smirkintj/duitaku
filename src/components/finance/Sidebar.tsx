@@ -11,6 +11,7 @@ interface SidebarProps {
   userName?: string
   userEmail?: string
   onLogout?: () => void
+  disabledKeys?: string[]
 }
 
 interface NavItem {
@@ -147,7 +148,7 @@ function NavButton({
   )
 }
 
-export default function Sidebar({ active, setActive, expanded, setExpanded, userName, userEmail, onLogout }: SidebarProps) {
+export default function Sidebar({ active, setActive, expanded, setExpanded, userName, userEmail, onLogout, disabledKeys = [] }: SidebarProps) {
   return (
     <div
       style={{
@@ -214,7 +215,7 @@ export default function Sidebar({ active, setActive, expanded, setExpanded, user
               {group.items.map((item) => (
                 <NavButton
                   key={item.key}
-                  item={item}
+                  item={{ ...item, disabled: item.disabled || disabledKeys.includes(item.key) }}
                   active={active === item.key}
                   expanded={expanded}
                   onClick={() => setActive(item.key)}
