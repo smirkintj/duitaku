@@ -141,7 +141,13 @@ export default function ImportPage() {
 
           {/* Upload card */}
           <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '24px 28px' }}>
-            <div style={{ ...S.mono, fontSize: 10, color: '#5b5b59', letterSpacing: '0.08em', marginBottom: 14 }}>UPLOAD PDF</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ ...S.mono, fontSize: 10, color: '#5b5b59', letterSpacing: '0.08em' }}>UPLOAD PDF</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <svg width="11" height="13" viewBox="0 0 11 13" fill="none"><rect x="1" y="5" width="9" height="7" rx="1.5" stroke="#3a3a3a" strokeWidth="1.2"/><path d="M3.5 5V3.5a2 2 0 0 1 4 0V5" stroke="#3a3a3a" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#3a3a3a', letterSpacing: '0.04em' }}>PDF never stored — transactions only</span>
+              </div>
+            </div>
             <form onSubmit={handleImport} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div
                 onClick={() => fileRef.current?.click()}
@@ -153,11 +159,19 @@ export default function ImportPage() {
                 <div style={{ fontSize: 13, color: file ? '#a3e635' : '#5b5b59', ...S.sans }}>
                   {file ? file.name : 'Drop PDF here or click to browse'}
                 </div>
+                {!file && (
+                  <div style={{ fontSize: 11, color: '#3a3a3a', ...S.sans, marginTop: 6 }}>
+                    Your bank or credit card statement · password-protected PDFs supported
+                  </div>
+                )}
               </div>
 
               {(needsPassword || password) && (
                 <div>
-                  <label style={S.label}>PDF Password</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <label style={{ ...S.label, marginBottom: 0 }}>PDF Password</label>
+                    <span style={{ fontSize: 11, color: '#3a3a3a', fontFamily: '"Geist", sans-serif' }}>— used only to unlock the file, never saved</span>
+                  </div>
                   <input autoFocus type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter PDF password" style={{ ...S.input, borderColor: needsPassword && !password ? '#ef4444' : undefined }} />
                 </div>
               )}

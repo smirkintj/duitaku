@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback } from 'react'
 import { formatRM } from '@/lib/finance-utils'
+import Tooltip from './Tooltip'
 
 export type EpfMode = '11' | '9' | 'custom'
 
@@ -47,8 +48,9 @@ function detectEpfMode(gross: number, epfEmp?: number): EpfMode {
   return 'custom'
 }
 
-function DeductionInput({ label, value, onChange, placeholder, note }: {
+function DeductionInput({ label, labelSuffix, value, onChange, placeholder, note }: {
   label: string
+  labelSuffix?: React.ReactNode
   value: string
   onChange: (v: string) => void
   placeholder?: string
@@ -56,8 +58,11 @@ function DeductionInput({ label, value, onChange, placeholder, note }: {
 }) {
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
-        <label style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.06em' }}>{label}</label>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.06em' }}>{label}</label>
+          {labelSuffix}
+        </div>
         {note && <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#3a3a3a' }}>{note}</span>}
       </div>
       <div style={{ position: 'relative' }}>
@@ -276,6 +281,7 @@ export default function SalaryForm({ defaults, fillKey, showEffectiveFrom = fals
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
           <DeductionInput
             label="SOCSO"
+            labelSuffix={<Tooltip text="SOCSO (PERKESO) is a social security contribution. Employee rate is 0.5% of gross, capped at RM5,000 gross. Pre-filled from your gross — override if your payslip differs." width={240} />}
             value={socsoOverride !== '' ? socsoOverride : (hasGross ? String(socso) : '')}
             onChange={v => setSocsoOverride(v)}
             placeholder={hasGross ? String(calcSocso(grossNum)) : '0.00'}
@@ -283,6 +289,7 @@ export default function SalaryForm({ defaults, fillKey, showEffectiveFrom = fals
           />
           <DeductionInput
             label="EIS"
+            labelSuffix={<Tooltip text="EIS (SIP) is Employment Insurance System. Employee rate is 0.2% of gross, capped at RM5,000 gross. Pre-filled from your gross — override if your payslip differs." width={240} />}
             value={eisOverride !== '' ? eisOverride : (hasGross ? String(eis) : '')}
             onChange={v => setEisOverride(v)}
             placeholder={hasGross ? String(calcEis(grossNum)) : '0.00'}
@@ -294,12 +301,14 @@ export default function SalaryForm({ defaults, fillKey, showEffectiveFrom = fals
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
           <DeductionInput
             label="PCB / INCOME TAX"
+            labelSuffix={<Tooltip text="PCB (Potongan Cukai Berjadual) is monthly income tax deducted by your employer. The amount varies by your tax bracket and reliefs. Find it on your payslip — it's not estimable from gross alone." width={240} />}
             value={pcb}
             onChange={setPcb}
             placeholder="from payslip"
           />
           <DeductionInput
             label="OTHER"
+            labelSuffix={<Tooltip text="Any other deductions not listed above — e.g. PTPTN loan repayment, uniform deductions, or advance repayments. Sum them all here." width={220} />}
             value={other}
             onChange={setOther}
             placeholder="0.00"

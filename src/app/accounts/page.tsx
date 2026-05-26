@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import SidebarClient from '@/components/finance/SidebarClient'
 import { Icon } from '@/components/finance/icons'
+import Tooltip from '@/components/finance/Tooltip'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -518,15 +519,24 @@ function AddAccountModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <div>
-                  <div style={{ ...S.label, marginBottom: 6 }}>LAST 4 DIGITS</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                    <div style={S.label}>LAST 4 DIGITS</div>
+                    <Tooltip text="Only the last 4 digits are stored — never your full card number. Used to identify the card on statements." />
+                  </div>
                   <input value={lastFour} onChange={(e) => setLastFour(e.target.value.replace(/\D/g, '').slice(-4))} placeholder="1234" maxLength={4} style={inputStyle} />
                 </div>
                 <div>
-                  <div style={{ ...S.label, marginBottom: 6 }}>STATEMENT DAY</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                    <div style={S.label}>STATEMENT DAY</div>
+                    <Tooltip text="The day your monthly statement is generated — when your spending is tallied. E.g. if your statement cuts on the 1st, enter 1." />
+                  </div>
                   <input type="number" min={1} max={31} value={statementDay} onChange={(e) => setStatementDay(e.target.value)} placeholder="1" style={inputStyle} />
                 </div>
                 <div>
-                  <div style={{ ...S.label, marginBottom: 6 }}>DUE DAY</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                    <div style={S.label}>DUE DAY</div>
+                    <Tooltip text="The day your statement payment is due — when you must pay to avoid late charges. Usually 20–25 days after the statement date." />
+                  </div>
                   <input type="number" min={1} max={31} value={statementDueDay} onChange={(e) => setStatementDueDay(e.target.value)} placeholder="25" style={inputStyle} />
                 </div>
               </div>

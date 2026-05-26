@@ -557,28 +557,34 @@ export default function SettingsPage() {
                   style={{ display: 'none' }}
                   onChange={handlePayslipUpload}
                 />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={parsing || loading}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 7,
-                    background: parsing ? '#1a1a1a' : 'rgba(163,230,53,0.08)',
-                    color: parsing ? '#3a3a3a' : '#a3e635',
-                    border: `1px solid ${parsing ? '#222' : 'rgba(163,230,53,0.25)'}`,
-                    borderRadius: 8,
-                    padding: '7px 13px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: parsing ? 'not-allowed' : 'pointer',
-                    ...S.sans,
-                    transition: 'all 150ms',
-                  }}
-                >
-                  {parsing ? <SpinnerIcon /> : <UploadIcon />}
-                  {parsing ? 'Reading payslip…' : 'Upload payslip PDF'}
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={parsing || loading}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      background: parsing ? '#1a1a1a' : 'rgba(163,230,53,0.08)',
+                      color: parsing ? '#3a3a3a' : '#a3e635',
+                      border: `1px solid ${parsing ? '#222' : 'rgba(163,230,53,0.25)'}`,
+                      borderRadius: 8,
+                      padding: '7px 13px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: parsing ? 'not-allowed' : 'pointer',
+                      ...S.sans,
+                      transition: 'all 150ms',
+                    }}
+                  >
+                    {parsing ? <SpinnerIcon /> : <UploadIcon />}
+                    {parsing ? 'Reading payslip…' : 'Upload payslip PDF'}
+                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <svg width="9" height="11" viewBox="0 0 9 11" fill="none"><rect x="0.5" y="4" width="8" height="6.5" rx="1.5" stroke="#3a3a3a" strokeWidth="1"/><path d="M2.5 4V3a2 2 0 0 1 4 0v1" stroke="#3a3a3a" strokeWidth="1" strokeLinecap="round"/></svg>
+                    <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#3a3a3a', letterSpacing: '0.04em' }}>PDF never stored — only numbers are extracted</span>
+                  </div>
+                </div>
               </div>
             </div>
 

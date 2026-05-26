@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import SidebarClient from '@/components/finance/SidebarClient'
 import { Icon } from '@/components/finance/icons'
 import { fetchAssetInsight, investmentTypesToAssets, resolveAsset, signalEmoji, AssetInsight } from '@/lib/market-data'
+import Tooltip from '@/components/finance/Tooltip'
 
 interface Investment {
   id: string
@@ -1419,11 +1420,17 @@ export default function InvestmentsPage() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={labelStyle}>COST BASIS (RM)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>COST BASIS (RM)</label>
+                      <Tooltip text="The total amount you invested — what you paid in. Used to calculate your gain or loss." width={200} />
+                    </div>
                     <input type="number" value={form.costBasis} onChange={e => setForm(f => ({ ...f, costBasis: e.target.value }))} placeholder="0.00" min="0" step="0.01" style={inputStyle} />
                   </div>
                   <div>
-                    <label style={labelStyle}>CURRENT VALUE (RM)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>CURRENT VALUE (RM)</label>
+                      <Tooltip text="What your investment is worth today. Update this periodically to keep your net worth accurate." width={210} />
+                    </div>
                     <input type="number" value={form.currentValue} onChange={e => setForm(f => ({ ...f, currentValue: e.target.value }))} placeholder="0.00" min="0" step="0.01" style={inputStyle} />
                   </div>
                 </div>
@@ -1482,11 +1489,17 @@ export default function InvestmentsPage() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={labelStyle}>COST BASIS (RM)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>COST BASIS (RM)</label>
+                      <Tooltip text="The total amount you invested — what you paid in. Used to calculate your gain or loss." width={200} />
+                    </div>
                     <input type="number" value={editingInvestment.costBasis} onChange={e => setEditingInvestment(p => p && ({ ...p, costBasis: parseFloat(e.target.value) || 0 }))} min="0" step="0.01" style={inputStyle} />
                   </div>
                   <div>
-                    <label style={labelStyle}>CURRENT VALUE (RM)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>CURRENT VALUE (RM)</label>
+                      <Tooltip text="What your investment is worth today. Update this periodically to keep your net worth accurate." width={210} />
+                    </div>
                     <input type="number" value={editingInvestment.currentValue} onChange={e => setEditingInvestment(p => p && ({ ...p, currentValue: parseFloat(e.target.value) || 0 }))} min="0" step="0.01" style={inputStyle} />
                   </div>
                 </div>
@@ -1542,10 +1555,16 @@ export default function InvestmentsPage() {
                   <label style={labelStyle}>API PASSPHRASE</label>
                   <input type="password" value={kcApiPassphrase} onChange={e => setKcApiPassphrase(e.target.value)} placeholder="Your KuCoin API passphrase" style={inputStyle} required />
                 </div>
-                <div style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 8, padding: '10px 14px' }}>
-                  <div style={{ ...S.label, marginBottom: 4 }}>PERMISSIONS REQUIRED</div>
-                  <div style={{ fontSize: 12, color: '#7a7a78', ...S.sans }}>
-                    Enable <strong style={{ color: '#f5f5f4' }}>General</strong> (read-only). No withdrawal permissions needed.
+                <div style={{ background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 8, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div>
+                    <div style={{ ...S.label, marginBottom: 4 }}>PERMISSIONS REQUIRED</div>
+                    <div style={{ fontSize: 12, color: '#7a7a78', ...S.sans }}>
+                      Enable <strong style={{ color: '#f5f5f4' }}>General</strong> (read-only). Do <strong style={{ color: '#f5f5f4' }}>not</strong> enable Trade or Withdrawal.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, paddingTop: 6, borderTop: '1px solid #1a1a1a' }}>
+                    <svg width="10" height="12" viewBox="0 0 10 12" fill="none"><rect x="0.5" y="4.5" width="9" height="7" rx="1.5" stroke="#3a3a3a" strokeWidth="1"/><path d="M2.5 4.5V3a2.5 2.5 0 0 1 5 0v1.5" stroke="#3a3a3a" strokeWidth="1" strokeLinecap="round"/></svg>
+                    <span style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: '#3a3a3a', letterSpacing: '0.04em' }}>Encrypted at rest — never logged or shared</span>
                   </div>
                 </div>
                 <button
