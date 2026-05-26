@@ -3,17 +3,18 @@ import { users, passwordResetTokens } from '@/db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
 import { randomBytes } from 'crypto'
 
-// Admin-only endpoint: GET /api/admin/reset-link?email=x&secret=ADMIN_SECRET
+// Admin-only endpoint: GET /api/admin/reset-link?email=x
+// Requires: Authorization: Bearer ADMIN_SECRET
 // Returns a password reset link you can send to a user via WhatsApp/Telegram.
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const secret = searchParams.get('secret')
-  const email = searchParams.get('email')
-
+  const auth = request.headers.get('authorization') ?? ''
   const adminSecret = process.env.ADMIN_SECRET
-  if (!adminSecret || secret !== adminSecret) {
+  if (!adminSecret || auth !== `Bearer ${adminSecret}`) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const { searchParams } = new URL(request.url)
+  const email = searchParams.get('email')
   if (!email) return Response.json({ error: 'email param required' }, { status: 400 })
 
   const [user] = await db.select({ id: users.id, email: users.email, name: users.name })

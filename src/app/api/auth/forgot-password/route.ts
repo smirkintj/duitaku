@@ -2,8 +2,14 @@ import { db } from '@/db'
 import { users, passwordResetTokens } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { randomBytes } from 'crypto'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+  if (!checkRateLimit(`forgot:${ip}`, 5, 60 * 60 * 1000)) {
+    return Response.json({ error: 'Too many requests' }, { status: 429 })
+  }
+
   const { email } = await request.json() as { email: string }
 
   if (!email) return Response.json({ error: 'Email required' }, { status: 400 })

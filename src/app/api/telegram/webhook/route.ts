@@ -17,6 +17,8 @@ import {
 } from '@/db/schema'
 import { and, eq, gte, lte, desc, sql } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
+import { validateAmount } from '@/lib/validate'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 function toTitleCase(s: string): string {
   return s.replace(/\b\w/g, c => c.toUpperCase()).replace(/\B\w/g, c => c.toLowerCase())
@@ -62,6 +64,11 @@ async function sendMessage(chatId: string, text: string): Promise<void> {
 async function handleLink(chatId: string, code: string | undefined): Promise<void> {
   if (!code) {
     await sendMessage(chatId, "Please send a code like: /start 123456\n\nGenerate a code in duitaku → Settings → Connect Telegram.")
+    return
+  }
+
+  if (!checkRateLimit(`tg-link:${chatId}`, 10, 15 * 60 * 1000)) {
+    await sendMessage(chatId, "Too many attempts. Please wait 15 minutes or generate a new code in duitaku Settings.")
     return
   }
 
@@ -157,7 +164,11 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
 
     if (matched) {
       await db.delete(telegramPending).where(eq(telegramPending.userId, userId))
-      const amount = pendingData.amount
+      let amount: number
+      try { amount = validateAmount(pendingData.amount) } catch {
+        await sendMessage(chatId, 'Invalid amount stored in pending topup. Please try again.')
+        return
+      }
       await db.insert(financeTransactions).values({
         userId, accountId: matched.id, amount, currency: 'MYR', date: today,
         note: 'Top-up via Telegram', type: 'topup',
@@ -471,19 +482,31 @@ ${insight.signalReason}
     await sendMessage(chatId, `✅ ${bill.name} marked paid — RM${fmt(bill.amount)} logged as expense`)
 
   } else if (parsed.intent === 'add_expense') {
-    const amount = parsed.amount ?? 0
+    let amount: number
+    try { amount = validateAmount(parsed.amount) } catch {
+      await sendMessage(chatId, 'Invalid amount — please use a positive number, e.g. "spent RM12.50 at mamak".')
+      return
+    }
     const merchant = parsed.merchant ? toTitleCase(parsed.merchant) : null
-    await db.insert(financeTransactions).values({ userId, amount, currency: 'MYR', date: today, merchant: merchant ?? 'Unknown', note: parsed.note ?? null, type: 'expense' })
+    await db.insert(financeTransactions).values({ userId, amount, currency: 'MYR', date: today, merchant: merchant ?? null, note: parsed.note ?? null, type: 'expense' })
     const label = merchant ? `at ${merchant}` : parsed.note ? `— ${parsed.note}` : ''
     await sendMessage(chatId, `✅ Logged RM${fmt(amount)} expense${label ? ' ' + label : ''}`)
 
   } else if (parsed.intent === 'add_income') {
-    const amount = parsed.amount ?? 0
+    let amount: number
+    try { amount = validateAmount(parsed.amount) } catch {
+      await sendMessage(chatId, 'Invalid amount — please use a positive number, e.g. "received RM500".')
+      return
+    }
     await db.insert(financeTransactions).values({ userId, amount, currency: 'MYR', date: today, note: parsed.note ?? null, type: 'income' })
     await sendMessage(chatId, `✅ Logged RM${fmt(amount)} income`)
 
   } else if (parsed.intent === 'topup') {
-    const amount = parsed.amount ?? 0
+    let amount: number
+    try { amount = validateAmount(parsed.amount) } catch {
+      await sendMessage(chatId, 'Invalid amount — please use a positive number, e.g. "topup RM50 to TnG".')
+      return
+    }
     const accountNameQuery = parsed.account_name ? normalizeAccountName(parsed.account_name) : ''
 
     const userAccounts = await db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId))
@@ -539,6 +562,12 @@ ${insight.signalReason}
 }
 
 export async function POST(request: Request) {
+  const secretToken = request.headers.get('x-telegram-bot-api-secret-token')
+  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET
+  if (!webhookSecret || secretToken !== webhookSecret) {
+    return new Response(null, { status: 401 })
+  }
+
   const body = await request.json() as TelegramUpdate
   const msg = body.message
   if (!msg?.text || !msg.chat?.id) return Response.json({ ok: true })
