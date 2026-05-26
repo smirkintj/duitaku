@@ -11,3 +11,17 @@ html, body {
 * {
   box-sizing: border-box;
 }
+
+/* Dashboard two-column grid — collapses to single column below 960px */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}

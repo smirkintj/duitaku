@@ -456,9 +456,7 @@ export default async function HomePage({ searchParams }: PageProps) {
             gap: 16,
             flex: 1,
             maxWidth: 1400,
-            width: '100%',
             boxSizing: 'border-box',
-            margin: '0 auto',
           }}
         >
           <SetupNudge nudges={activeNudges} total={allNudges.length} />
@@ -467,7 +465,7 @@ export default async function HomePage({ searchParams }: PageProps) {
 
           <RecurringSuggestions />
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+          <div className="dashboard-grid">
             {/* Left column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <HeroRemaining
