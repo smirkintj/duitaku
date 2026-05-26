@@ -8,6 +8,8 @@ import AddTransactionModal from '@/components/finance/AddTransactionModal'
 import EditTransactionModal from '@/components/finance/EditTransactionModal'
 import { Icon } from '@/components/finance/icons'
 
+interface Settings { payDay?: number }
+
 interface Transaction {
   id: string
   amount: number
@@ -63,6 +65,7 @@ function TransactionsContent() {
 
   const [txs, setTxs] = useState<Transaction[]>([])
   const [cats, setCats] = useState<Category[]>([])
+  const [settings, setSettings] = useState<Settings>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'all' | 'expense' | 'income'>('all')
@@ -73,12 +76,14 @@ function TransactionsContent() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [txRes, catRes] = await Promise.all([
+    const [txRes, catRes, settingsRes] = await Promise.all([
       fetch(`/api/transactions?m=${month}`),
       fetch('/api/categories'),
+      fetch('/api/settings'),
     ])
     setTxs(await txRes.json())
     setCats(await catRes.json())
+    if (settingsRes.ok) setSettings(await settingsRes.json())
     setLoading(false)
   }, [month])
 
@@ -111,6 +116,19 @@ function TransactionsContent() {
   return (
     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
+      {(() => {
+        const payDay = settings.payDay ?? 1
+        const cycleLabel = payDay > 1 ? (() => {
+          const [y, mo] = month.split('-').map(Number)
+          const start = new Date(y, mo - 1, payDay)
+          let ey = y, em = mo + 1
+          if (em > 12) { em = 1; ey++ }
+          const endDay = Math.min(payDay - 1, new Date(ey, em, 0).getDate())
+          const end = new Date(ey, em - 1, endDay)
+          const fmt = (d: Date) => d.toLocaleString('en-MY', { day: 'numeric', month: 'short' }).toUpperCase()
+          return `${fmt(start)} – ${fmt(end)}`
+        })() : fmtMonth(month)
+        return (
       <div style={{ height: 72, background: '#0d0d0d', borderBottom: '1px solid #141414', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', flexShrink: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={S.label}>TRANSACTIONS / {fmtMonth(month)}</span>
@@ -121,7 +139,7 @@ function TransactionsContent() {
             <button onClick={() => router.push(`/transactions?m=${prevMonth(month)}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#7a7a78', display: 'flex', alignItems: 'center', padding: '3px 5px', borderRadius: 7 }}>
               <Icon name="chevL" width={14} height={14} />
             </button>
-            <span style={{ fontSize: 11, ...S.mono, color: '#d0d0cf', letterSpacing: '0.06em', padding: '0 4px' }}>{fmtMonth(month)}</span>
+            <span style={{ fontSize: 11, ...S.mono, color: '#d0d0cf', letterSpacing: '0.06em', padding: '0 4px' }}>{cycleLabel}</span>
             <button onClick={() => router.push(`/transactions?m=${nextMonth(month)}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#7a7a78', display: 'flex', alignItems: 'center', padding: '3px 5px', borderRadius: 7 }}>
               <Icon name="chevR" width={14} height={14} />
             </button>
@@ -131,6 +149,8 @@ function TransactionsContent() {
           </button>
         </div>
       </div>
+        )
+      })()}
 
       <div style={{ padding: '24px 32px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Stats */}

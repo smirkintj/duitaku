@@ -1,8 +1,9 @@
 import { db } from '@/db'
-import { financeTransactions } from '@/db/schema'
+import { financeTransactions, userSettings } from '@/db/schema'
 import { and, gte, lte, desc, eq, SQL } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 import { validateAmount, validationError } from '@/lib/validate'
+import { getPayCycle } from '@/lib/pay-cycle'
 
 export async function GET(request: Request) {
   const userId = await getUserIdFromRequest(request)
@@ -19,9 +20,14 @@ export async function GET(request: Request) {
 
   let rows
   if (m && /^\d{4}-\d{2}$/.test(m)) {
-    const [y, mo] = m.split('-')
-    conditions.push(gte(financeTransactions.date, `${y}-${mo}-01`))
-    conditions.push(lte(financeTransactions.date, `${y}-${mo}-31`))
+    // Use pay cycle dates if user has a non-default pay day
+    const [settingsRow] = await db.select({ payDay: userSettings.payDay })
+      .from(userSettings).where(eq(userSettings.userId, userId)).limit(1)
+    const payDay = settingsRow?.payDay ?? 1
+    const cycle = getPayCycle(m, payDay)
+
+    conditions.push(gte(financeTransactions.date, cycle.startDate))
+    conditions.push(lte(financeTransactions.date, cycle.endDate))
     rows = await db
       .select()
       .from(financeTransactions)
