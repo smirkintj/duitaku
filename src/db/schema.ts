@@ -139,6 +139,7 @@ export const financeBnpl = pgTable('finance_bnpl', {
   startMonth: text('start_month').notNull(),
   notes: text('notes'),
   isActive: boolean('is_active').notNull().default(true),
+  lastPaidAt: timestamp('last_paid_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 

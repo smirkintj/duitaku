@@ -41,6 +41,7 @@ interface BnplPlan {
   startMonth: string
   notes: string | null
   isActive: boolean
+  lastPaidAt: string | null
 }
 
 interface CcAccount {
@@ -249,10 +250,12 @@ export default function BillsPage() {
 
   async function payBnpl(id: string) {
     setPayingBnpl(id)
+    const d = new Date()
+    const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     await fetch(`/api/bnpl/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payInstallment: true }),
+      body: JSON.stringify({ payInstallment: true, date: localDate }),
     })
     await loadBnpl()
     setPayingBnpl(null)
@@ -520,6 +523,11 @@ export default function BillsPage() {
                           </div>
                           <div style={{ fontSize: 15, fontWeight: 600, color: isCompleted ? '#7a7a78' : '#f5f5f4', ...S.sans }}>{plan.merchant}</div>
                           {plan.notes && <div style={{ fontSize: 11, color: '#5b5b59', ...S.sans, marginTop: 2 }}>{plan.notes}</div>}
+                          {plan.lastPaidAt && (
+                            <div style={{ fontSize: 10, color: '#5b5b59', ...S.mono, marginTop: 4, letterSpacing: '0.04em' }}>
+                              LAST PAID {new Date(plan.lastPaidAt).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase()}
+                            </div>
+                          )}
                         </div>
                         <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                           <button

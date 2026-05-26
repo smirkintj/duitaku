@@ -11,6 +11,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await request.json() as {
     payInstallment?: boolean
+    date?: string  // client local date YYYY-MM-DD to avoid UTC offset issues
     paidInstallments?: number
     isActive?: boolean
     merchant?: string
@@ -27,16 +28,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!bnpl) return Response.json({ error: 'Not found' }, { status: 404 })
     const newPaid = bnpl.paidInstallments + 1
     const isNowDone = newPaid >= bnpl.totalInstallments
-    const today = new Date().toISOString().slice(0, 10)
+    // Prefer the client-supplied local date to avoid UTC offset mismatch
+    const fallbackDate = new Date().toISOString().slice(0, 10)
+    const txDate = (body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date)) ? body.date : fallbackDate
+    const now = new Date()
     await db.insert(financeTransactions).values({
       userId,
+      accountId: bnpl.accountId ?? null,
       amount: bnpl.installmentAmount,
-      date: today,
+      currency: 'MYR',
+      date: txDate,
       type: 'expense',
       merchant: `${bnpl.merchant} (BNPL ${newPaid}/${bnpl.totalInstallments})`,
       isRecurring: true,
     })
-    const [updated] = await db.update(financeBnpl).set({ paidInstallments: newPaid, isActive: !isNowDone }).where(and(eq(financeBnpl.id, id), eq(financeBnpl.userId, userId))).returning()
+    const [updated] = await db.update(financeBnpl)
+      .set({ paidInstallments: newPaid, isActive: !isNowDone, lastPaidAt: now })
+      .where(and(eq(financeBnpl.id, id), eq(financeBnpl.userId, userId)))
+      .returning()
     return Response.json(updated)
   }
 
