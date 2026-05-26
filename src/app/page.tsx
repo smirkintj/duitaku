@@ -481,6 +481,9 @@ export default async function HomePage({ searchParams }: PageProps) {
                 cycleLabel={payDay > 1 ? cycleLabel : undefined}
               />
               <CategoriesBlock categories={categoryStats} month={monthStr} />
+              {savingsGoals.filter(g => g.targetAmount && g.targetAmount > 0).length > 0 && (
+                <UpcomingGoals goals={savingsGoals.filter(g => g.targetAmount && g.targetAmount > 0)} />
+              )}
             </div>
 
             {/* Right column */}
@@ -504,12 +507,11 @@ export default async function HomePage({ searchParams }: PageProps) {
                 isCurrentCycle={isCurrentCycle}
               />
               <RecentTransactions transactions={recentTxs} />
-              {savingsGoals.filter(g => g.targetAmount && g.targetAmount > 0).length > 0 && (
-                <UpcomingGoals goals={savingsGoals.filter(g => g.targetAmount && g.targetAmount > 0)} />
-              )}
-              <AICoachCard month={monthStr} />
             </div>
           </div>
+
+          {/* Full-width row below the grid */}
+          <AICoachCard month={monthStr} />
         </main>
       </div>
     </div>
