@@ -34,6 +34,7 @@ interface NetWorthWidgetProps {
 export default function NetWorthWidget({ month: _month }: NetWorthWidgetProps) {
   const [data, setData] = useState<NetWorthData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hidden, toggleHidden] = usePrivacyMode()
 
   useEffect(() => {
     fetch('/api/net-worth')
@@ -51,8 +52,6 @@ export default function NetWorthWidget({ month: _month }: NetWorthWidgetProps) {
   }
 
   if (!data) return null
-
-  const [hidden, toggleHidden] = usePrivacyMode()
   const { assets, liabilities, netWorth } = data
   const positive = netWorth >= 0
   const totalSum = assets.total + liabilities.total
