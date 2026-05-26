@@ -16,6 +16,7 @@ interface HeroRemainingProps {
   dayOfMonth: number
   dailySpend: number[]
   month: string // YYYY-MM
+  cycleLabel?: string
 }
 
 function DayPacingDial({
@@ -208,9 +209,10 @@ export default function HeroRemaining({
   dayOfMonth,
   dailySpend,
   month,
+  cycleLabel,
 }: HeroRemainingProps) {
   const [hidden] = usePrivacyMode()
-  const monthLabel = new Date(month + '-01').toLocaleString('en-MY', { month: 'short', year: 'numeric' }).toUpperCase()
+  const monthLabel = cycleLabel ?? new Date(month + '-01').toLocaleString('en-MY', { month: 'short', year: 'numeric' }).toUpperCase()
   const rmStr = formatRM(remaining)
   const dotIdx = rmStr.indexOf('.')
   const intPart = dotIdx >= 0 ? rmStr.slice(0, dotIdx) : rmStr

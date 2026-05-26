@@ -466,6 +466,7 @@ export default async function HomePage({ searchParams }: PageProps) {
                 dayOfMonth={dayOfMonth}
                 dailySpend={dailySpend}
                 month={monthStr}
+                cycleLabel={payDay > 1 ? cycleLabel : undefined}
               />
               <CategoriesBlock categories={categoryStats} month={monthStr} />
             </div>

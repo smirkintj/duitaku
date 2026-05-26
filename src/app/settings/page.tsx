@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import SidebarClient from '@/components/finance/SidebarClient'
 import SalaryForm, { SalaryFormValues, SalaryFormDefaults } from '@/components/finance/SalaryForm'
 import AccountsManager from '@/components/finance/AccountsManager'
 import { formatRM } from '@/lib/finance-utils'
+import { getPayCycle, getCurrentBaseMonth } from '@/lib/pay-cycle'
 
 const S = {
   label: { fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.08em' } as React.CSSProperties,
@@ -483,63 +484,59 @@ export default function SettingsPage() {
             </div>
 
             {/* Pay cycle */}
-            <div style={cardStyle}>
-              <div style={{ ...S.label, marginBottom: 6 }}>PAY CYCLE</div>
-              <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: '0 0 16px', lineHeight: 1.6 }}>
-                The day your salary arrives each month. Budget cycles start from this day.
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label style={S.label}>DAY OF MONTH</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={payDayInput}
-                    onChange={e => setPayDayInput(e.target.value)}
-                    style={{
-                      width: 80,
-                      background: '#0d0d0d',
-                      border: '1px solid #2a2a2a',
-                      borderRadius: 8,
-                      color: '#f5f5f4',
-                      fontSize: 15,
-                      fontWeight: 600,
-                      padding: '8px 12px',
-                      fontFamily: '"JetBrains Mono", monospace',
-                      outline: 'none',
-                    }}
-                  />
+            {(() => {
+              const previewDay = Math.min(31, Math.max(1, parseInt(payDayInput, 10) || 1))
+              const now = new Date()
+              const baseMonth = getCurrentBaseMonth(now, previewDay)
+              const cycle = getPayCycle(baseMonth, previewDay)
+              const isCalendarMonth = previewDay === 1
+              return (
+                <div style={cardStyle}>
+                  <div style={{ ...S.label, marginBottom: 6 }}>PAY CYCLE</div>
+                  <p style={{ fontSize: 13, color: '#5b5b59', ...S.sans, margin: '0 0 16px', lineHeight: 1.6 }}>
+                    The day your salary arrives. All budget cycles and the dashboard period align to this date.
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={S.label}>PAY DAY</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={payDayInput}
+                        onChange={e => setPayDayInput(e.target.value)}
+                        style={{ width: 80, background: '#0d0d0d', border: '1px solid #2a2a2a', borderRadius: 8, color: '#f5f5f4', fontSize: 15, fontWeight: 600, padding: '8px 12px', fontFamily: '"JetBrains Mono", monospace', outline: 'none' }}
+                      />
+                    </div>
+                    <button
+                      onClick={handlePayDaySave}
+                      style={{ marginTop: 22, background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', ...S.sans }}
+                    >
+                      Save
+                    </button>
+                    {payDaySaved && (
+                      <span style={{ marginTop: 22, fontSize: 13, color: '#a3e635', ...S.sans }}>Saved!</span>
+                    )}
+                  </div>
+
+                  {/* Live cycle preview */}
+                  <div style={{ padding: '12px 14px', background: '#0d0d0d', border: '1px solid #1a1a1a', borderRadius: 10 }}>
+                    <div style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#3a3a3a', letterSpacing: '0.08em', marginBottom: 8 }}>CURRENT CYCLE PREVIEW</div>
+                    {isCalendarMonth ? (
+                      <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans }}>
+                        1 – {new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()} {now.toLocaleString('en-MY', { month: 'long', year: 'numeric' })}
+                        <div style={{ fontSize: 11, color: '#3a3a3a', marginTop: 4 }}>Standard calendar month — change pay day to match your actual salary date</div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: '#a3e635', ...S.sans }}>{cycle.label}</div>
+                        <div style={{ fontSize: 11, color: '#5b5b59', ...S.sans, marginTop: 4 }}>{cycle.daysIn} days · dashboard and budget totals will use this range</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <button
-                  onClick={handlePayDaySave}
-                  style={{
-                    marginTop: 22,
-                    background: '#a3e635',
-                    color: '#0d0d0d',
-                    border: 'none',
-                    borderRadius: 8,
-                    padding: '9px 18px',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    ...S.sans,
-                  }}
-                >
-                  Save
-                </button>
-                {payDaySaved && (
-                  <span style={{ marginTop: 22, fontSize: 13, color: '#a3e635', ...S.sans }}>Saved!</span>
-                )}
-              </div>
-              {payDay > 1 && (
-                <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(163,230,53,0.05)', border: '1px solid rgba(163,230,53,0.12)', borderRadius: 8 }}>
-                  <span style={{ fontSize: 12, color: '#7a7a78', ...S.sans }}>
-                    Cycle: <span style={{ color: '#a3e635', fontWeight: 600 }}>day {payDay}</span> of each month
-                  </span>
-                </div>
-              )}
-            </div>
+              )
+            })()}
           </div>
 
           {/* ── ROW 2: Salary form (full width — it's complex) ── */}
