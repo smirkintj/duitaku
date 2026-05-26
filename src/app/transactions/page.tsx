@@ -214,7 +214,8 @@ function TransactionsContent() {
               ) : (
                 filtered.map((tx, i) => {
                   const cat = tx.categoryId ? catMap.get(tx.categoryId) : undefined
-                  const label = tx.merchant ?? tx.note ?? 'Unknown'
+                  const effectiveMerchant = tx.merchant && tx.merchant !== 'Unknown' ? tx.merchant : null
+                  const label = effectiveMerchant ?? tx.note ?? '—'
                   return (
                     <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '13px 20px', borderBottom: i < filtered.length - 1 ? '1px solid #141414' : 'none', alignItems: 'center' }}>
                       <span style={{ fontSize: 11, color: '#7a7a78', ...S.mono }}>{fmtDate(tx.date)}</span>
