@@ -302,17 +302,18 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
         {/* Step 5 — Done */}
         {step === 5 && (
           <div>
-            <Header label="STEP 4 OF 4 — TRANSACTIONS" />
+            <Header label="STEP 4 OF 4 — DONE" />
             <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(163,230,53,0.1)', border: '1px solid rgba(163,230,53,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a3e635" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
             </div>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: '#f5f5f4', ...S.sans, margin: '0 0 10px', letterSpacing: '-0.02em' }}>You're all set.</h2>
             <p style={{ fontSize: 14, color: '#7a7a78', ...S.sans, margin: '0 0 24px', lineHeight: 1.6 }}>
-              Now bring in your transactions. Import a bank or CC statement PDF for the fastest start, or add them manually.
+              Log your first expense now to start tracking, import a bank statement, or go straight to the dashboard.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button style={primaryBtn} onClick={() => { dismiss(); window.location.href = '/import' }}>Import bank statement →</button>
-              <button style={{ width: '100%', background: 'transparent', color: '#7a7a78', border: '1px solid #2a2a2a', borderRadius: 9, padding: '12px 0', fontSize: 14, fontWeight: 600, ...S.sans, cursor: 'pointer' }} onClick={dismiss}>Go to dashboard</button>
+              <button style={primaryBtn} onClick={() => { dismiss(); window.dispatchEvent(new CustomEvent('open-add-modal')) }}>Log first expense →</button>
+              <button style={{ width: '100%', background: 'transparent', color: '#a3e635', border: '1px solid rgba(163,230,53,0.3)', borderRadius: 9, padding: '12px 0', fontSize: 14, fontWeight: 600, ...S.sans, cursor: 'pointer' }} onClick={() => { dismiss(); window.location.href = '/import' }}>Import bank statement →</button>
+              <button style={{ width: '100%', background: 'transparent', color: '#5b5b59', border: 'none', borderRadius: 9, padding: '8px 0', fontSize: 13, ...S.sans, cursor: 'pointer' }} onClick={dismiss}>Go to dashboard</button>
             </div>
           </div>
         )}

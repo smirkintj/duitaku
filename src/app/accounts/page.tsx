@@ -390,6 +390,91 @@ function CreditCardVisual({ account }: { account: Account }) {
   )
 }
 
+// ─── Reconcile Bar ───────────────────────────────────────────────────────────
+
+function ReconcileBar({ account, onUpdated }: { account: Account; onUpdated: () => void }) {
+  const storageKey = `duitaku_reconciled_${account.id}`
+  const monthStr = currentMonthStr()
+
+  const [status, setStatus] = useState<'idle' | 'prompt' | 'adjust' | 'done'>('idle')
+  const [actualInput, setActualInput] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const last = localStorage.getItem(storageKey)
+    if (last !== monthStr) setStatus('prompt')
+  }, [storageKey, monthStr])
+
+  const liveBalance = account.currentBalance ?? account.initialBalance
+
+  function dismiss() {
+    localStorage.setItem(storageKey, monthStr)
+    setStatus('done')
+  }
+
+  async function saveAdjustment() {
+    const actual = parseFloat(actualInput)
+    if (isNaN(actual)) return
+    const diff = actual - liveBalance
+    if (Math.abs(diff) < 0.01) { dismiss(); return }
+    setSaving(true)
+    const today = new Date().toISOString().slice(0, 10)
+    await fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accountId: account.id,
+        amount: Math.abs(diff),
+        currency: 'MYR',
+        date: today,
+        note: 'Balance adjustment',
+        type: diff > 0 ? 'income' : 'expense',
+      }),
+    })
+    setSaving(false)
+    localStorage.setItem(storageKey, monthStr)
+    setStatus('done')
+    onUpdated()
+  }
+
+  if (status === 'idle' || status === 'done') return null
+
+  return (
+    <div style={{ borderTop: '1px solid #1a1a1a', padding: '12px 16px', background: '#0c0c0c', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {status === 'prompt' && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <span style={{ fontSize: 11, color: '#7a7a78', fontFamily: '"Geist", -apple-system, sans-serif' }}>
+            Does <span style={{ color: '#f5f5f4', fontWeight: 600 }}>RM {fmt(liveBalance)}</span> match your actual balance?
+          </span>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button onClick={dismiss} style={{ fontSize: 11, color: '#a3e635', background: 'transparent', border: '1px solid rgba(163,230,53,0.3)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontFamily: '"Geist", -apple-system, sans-serif' }}>Yes</button>
+            <button onClick={() => setStatus('adjust')} style={{ fontSize: 11, color: '#7a7a78', background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontFamily: '"Geist", -apple-system, sans-serif' }}>Adjust</button>
+          </div>
+        </div>
+      )}
+      {status === 'adjust' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, color: '#5b5b59', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}>RM</span>
+          <input
+            autoFocus
+            type="number"
+            value={actualInput}
+            onChange={e => setActualInput(e.target.value)}
+            placeholder={String(liveBalance.toFixed(2))}
+            onKeyDown={e => { if (e.key === 'Enter') saveAdjustment(); if (e.key === 'Escape') setStatus('prompt') }}
+            style={{ background: '#0d0d0d', border: '1px solid #333', borderRadius: 6, padding: '5px 10px', fontSize: 13, color: '#f5f5f4', fontFamily: '"Geist", -apple-system, sans-serif', outline: 'none', width: 100, colorScheme: 'dark' }}
+          />
+          <button onClick={saveAdjustment} disabled={saving || !actualInput} style={{ fontSize: 11, color: '#0d0d0d', background: '#a3e635', border: 'none', borderRadius: 6, padding: '5px 12px', cursor: saving || !actualInput ? 'not-allowed' : 'pointer', fontFamily: '"Geist", -apple-system, sans-serif', fontWeight: 600, opacity: saving || !actualInput ? 0.6 : 1 }}>
+            {saving ? '...' : 'Save'}
+          </button>
+          <button onClick={() => setStatus('prompt')} style={{ fontSize: 11, color: '#5b5b59', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 4px' }}>cancel</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Bank / Cash Card ────────────────────────────────────────────────────────
 
 function BankCard({ account, onUpdated }: { account: Account; onUpdated: () => void }) {
@@ -436,6 +521,7 @@ function BankCard({ account, onUpdated }: { account: Account; onUpdated: () => v
       </div>
       <div style={{ border: '1px solid #1a1a1a', borderTop: '1px solid #141414', background: '#0f0f0f', padding: '0' }}>
         <MonthlyAllocationBar account={account} onUpdated={onUpdated} />
+        <ReconcileBar account={account} onUpdated={onUpdated} />
       </div>
       <a
         href={`/transactions?account=${account.id}`}

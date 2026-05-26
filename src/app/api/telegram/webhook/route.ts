@@ -15,7 +15,7 @@ import {
   financeInvestments,
   financeAccounts,
 } from '@/db/schema'
-import { and, eq, gte, lte, desc, sql } from 'drizzle-orm'
+import { and, eq, gte, lte, desc, sql, isNotNull } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
 import { validateAmount } from '@/lib/validate'
 import { checkRateLimit } from '@/lib/rate-limit'
@@ -488,7 +488,21 @@ ${insight.signalReason}
       return
     }
     const merchant = parsed.merchant ? toTitleCase(parsed.merchant) : null
-    await db.insert(financeTransactions).values({ userId, amount, currency: 'MYR', date: today, merchant: merchant ?? null, note: parsed.note ?? null, type: 'expense' })
+    let categoryId: string | null = null
+    if (merchant) {
+      const [catRow] = await db.select({ categoryId: financeTransactions.categoryId })
+        .from(financeTransactions)
+        .where(and(
+          eq(financeTransactions.userId, userId),
+          isNotNull(financeTransactions.categoryId),
+          sql`lower(${financeTransactions.merchant}) = ${merchant.toLowerCase()}`,
+        ))
+        .groupBy(financeTransactions.categoryId)
+        .orderBy(desc(sql`count(*)`))
+        .limit(1)
+      categoryId = catRow?.categoryId ?? null
+    }
+    await db.insert(financeTransactions).values({ userId, amount, currency: 'MYR', date: today, merchant: merchant ?? null, note: parsed.note ?? null, type: 'expense', categoryId })
     const label = merchant ? `at ${merchant}` : parsed.note ? `— ${parsed.note}` : ''
     await sendMessage(chatId, `✅ Logged RM${fmt(amount)} expense${label ? ' ' + label : ''}`)
 
