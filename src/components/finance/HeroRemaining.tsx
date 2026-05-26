@@ -234,7 +234,7 @@ export default function HeroRemaining({
         borderRadius: 16,
         border: '1px solid #1a1a1a',
         background: 'linear-gradient(180deg, #111 0%, #0d0d0d 100%)',
-        padding: '28px 32px',
+        padding: '32px 36px',
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -319,7 +319,7 @@ export default function HeroRemaining({
           </div>
 
           {/* Subline */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
             <span style={{ fontSize: 13, color: '#a0a09e', fontFamily: '"Geist", -apple-system, sans-serif' }}>
               {hidden ? 'buffer after commitments' : `buffer · RM ${formatRM(salary)} salary`}
             </span>
@@ -350,7 +350,7 @@ export default function HeroRemaining({
 
       {/* Allocation bar */}
       {!hidden && salary > 0 && (
-        <div style={{ marginTop: 22, position: 'relative', zIndex: 1 }}>
+        <div style={{ marginTop: 32, position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
             {[
               { label: 'COMMITTED', amount: committedTotal, color: '#f97316' },
@@ -381,7 +381,7 @@ export default function HeroRemaining({
       )}
 
       {/* Spend curve section */}
-      <div style={{ marginTop: 20, position: 'relative', zIndex: 1 }}>
+      <div style={{ marginTop: 28, position: 'relative', zIndex: 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.08em' }}>
             DAILY SPEND · MTD

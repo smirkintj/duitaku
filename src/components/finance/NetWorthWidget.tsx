@@ -63,12 +63,12 @@ export default function NetWorthWidget({ month: _month }: NetWorthWidgetProps) {
   )
 
   return (
-    <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '18px 24px' }}>
+    <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '22px 28px' }}>
       {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
         {/* Left: label + net worth number */}
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
             <div style={S.label}>NET WORTH</div>
             <button
               onClick={toggleHidden}

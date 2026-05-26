@@ -450,13 +450,15 @@ export default async function HomePage({ searchParams }: PageProps) {
         />
         <main
           style={{
-            padding: '24px 32px 40px',
+            padding: '32px 40px 56px',
             display: 'flex',
             flexDirection: 'column',
-            gap: 16,
+            gap: 24,
             flex: 1,
             maxWidth: 1400,
+            width: '100%',
             boxSizing: 'border-box',
+            margin: '0 auto',
           }}
         >
           <SetupNudge nudges={activeNudges} total={allNudges.length} />
@@ -467,7 +469,7 @@ export default async function HomePage({ searchParams }: PageProps) {
 
           <div className="dashboard-grid">
             {/* Left column */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <HeroRemaining
                 remaining={remaining}
                 salary={salary}
@@ -487,7 +489,7 @@ export default async function HomePage({ searchParams }: PageProps) {
             </div>
 
             {/* Right column */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <NetWorthWidget month={monthStr} />
               <StatsColumn
                 income={income}

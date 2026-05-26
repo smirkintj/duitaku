@@ -54,10 +54,10 @@ function Bucket({
       borderRadius: 14,
       border: highlight ? `1px solid ${barColor}28` : '1px solid #1a1a1a',
       background: highlight ? `${barColor}06` : '#0f0f0f',
-      padding: '14px 16px',
+      padding: '18px 20px',
       display: 'flex',
       flexDirection: 'column',
-      gap: 8,
+      gap: 12,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ ...S.label }}>{label}</span>
@@ -126,7 +126,7 @@ export default function StatsColumn({
   const projColor = projPct >= 20 ? '#a3e635' : projPct >= 10 ? '#fbbf24' : '#ef4444'
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <Bucket
         label="COMMITTED"
         amount={committedTotal}
@@ -167,7 +167,7 @@ export default function StatsColumn({
           borderRadius: 14,
           border: `1px solid ${projColor}20`,
           background: `${projColor}06`,
-          padding: '12px 16px',
+          padding: '18px 20px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
