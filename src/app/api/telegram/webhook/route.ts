@@ -1,11 +1,13 @@
 // SQL migration required (run in Neon):
 // CREATE TABLE telegram_connections (user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, telegram_chat_id TEXT NOT NULL UNIQUE, linked_at TIMESTAMPTZ DEFAULT NOW() NOT NULL);
 // CREATE TABLE telegram_link_codes (code TEXT PRIMARY KEY, user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL);
+// CREATE TABLE telegram_pending (user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, intent TEXT NOT NULL, data TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL);
 
 import { db } from '@/db'
 import {
   telegramConnections,
   telegramLinkCodes,
+  telegramPending,
   financeBills,
   financeBillPayments,
   financeTransactions,
@@ -18,6 +20,14 @@ import Anthropic from '@anthropic-ai/sdk'
 
 function toTitleCase(s: string): string {
   return s.replace(/\b\w/g, c => c.toUpperCase()).replace(/\B\w/g, c => c.toLowerCase())
+}
+
+function normalizeAccountName(s: string): string {
+  return s.toLowerCase()
+    .replace(/[''`]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 import { fetchAssetInsight, investmentTypesToAssets, resolveAsset, signalEmoji } from '@/lib/market-data'
 
@@ -125,14 +135,58 @@ Just type naturally — I'll understand most phrasings.`
 function fmt(n: number) { return n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 
 async function handleMessage(userId: string, chatId: string, text: string): Promise<void> {
-  const bills = await db.select().from(financeBills)
-    .where(and(eq(financeBills.userId, userId), eq(financeBills.isActive, true)))
-
   const now = new Date()
   const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const monthStart = `${monthStr}-01`
   const monthEnd = `${monthStr}-31`
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+  // Check for pending multi-turn state (e.g. awaiting account name for topup)
+  const [pending] = await db.select().from(telegramPending)
+    .where(and(eq(telegramPending.userId, userId), gte(telegramPending.expiresAt, now)))
+    .limit(1)
+
+  if (pending?.intent === 'topup') {
+    const pendingData = JSON.parse(pending.data) as { amount: number }
+    const accountQuery = normalizeAccountName(text)
+    const userAccounts = await db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId))
+    const matched = userAccounts.find(a => {
+      const norm = normalizeAccountName(a.name)
+      return norm.includes(accountQuery) || accountQuery.includes(norm)
+    })
+
+    if (matched) {
+      await db.delete(telegramPending).where(eq(telegramPending.userId, userId))
+      const amount = pendingData.amount
+      await db.insert(financeTransactions).values({
+        userId, accountId: matched.id, amount, currency: 'MYR', date: today,
+        note: 'Top-up via Telegram', type: 'topup',
+      })
+      const [topupRow] = await db.select({
+        total: sql<number>`coalesce(sum(${financeTransactions.amount}), 0)`,
+      }).from(financeTransactions).where(and(
+        eq(financeTransactions.userId, userId),
+        eq(financeTransactions.accountId, matched.id),
+        eq(financeTransactions.type, 'topup'),
+        sql`${financeTransactions.date} like ${monthStr + '-%'}`,
+      ))
+      const toppedUpTotal = Number(topupRow?.total ?? 0)
+      if (matched.monthlyAllocation) {
+        const remaining = matched.monthlyAllocation - toppedUpTotal
+        await sendMessage(chatId, `Added RM${fmt(amount)} to ${matched.name}.\n\nMonthly budget: RM${fmt(matched.monthlyAllocation)}\nTopped up: RM${fmt(toppedUpTotal)} this month\nRemaining: RM${fmt(remaining)}`)
+      } else {
+        await sendMessage(chatId, `Added RM${fmt(amount)} to ${matched.name}.`)
+      }
+      return
+    } else {
+      const names = userAccounts.map(a => `• ${a.name}`).join('\n')
+      await sendMessage(chatId, `Couldn't find that account. Which account?\n${names || '(no accounts found)'}`)
+      return
+    }
+  }
+
+  const bills = await db.select().from(financeBills)
+    .where(and(eq(financeBills.userId, userId), eq(financeBills.isActive, true)))
 
   const monthTxns = await db.select().from(financeTransactions)
     .where(and(eq(financeTransactions.userId, userId), gte(financeTransactions.date, monthStart), lte(financeTransactions.date, monthEnd)))
@@ -176,26 +230,43 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
       const amount = parseFloat(amtMatch[1].replace(',', '.'))
       // "using Ryt" or "at Ryt" → merchant
       const usingMatch = text.match(/\b(?:using|at|via|through)\s+([^\s]+(?:\s+[^\s]+)?)/i)
-      const merchant = usingMatch ? toTitleCase(usingMatch[1].trim()) : 'Unknown'
+      const merchant = usingMatch ? toTitleCase(usingMatch[1].trim()) : null
       // Everything left after removing verb, amount, merchant clause = note
       const note = text
         .replace(/rm\s*\d+(?:[.,]\d+)?/i, '')
         .replace(/\b\d+(?:[.,]\d+)?\b/, '')
-        .replace(/\b(?:using|at|via|through)\s+\S+/i, '')
+        .replace(/\b(?:using|at|via|through)\s+\S+(?:\s+\S+)?/i, '')
         .replace(/\bspent?\b|\bspend\b|\bbeli\b|\bbought\b/i, '')
         .replace(/\s+/g, ' ').trim() || null
-      parsed = { intent: 'add_expense', amount, merchant, note }
+      parsed = { intent: 'add_expense', amount, merchant: merchant ?? undefined, note }
     }
   } else if (['received ', 'got paid', 'income ', 'masuk rm', 'dapat '].some(k => lower.includes(k))) {
     const amtMatch = text.match(/rm\s*(\d+(?:\.\d+)?)/i) ?? text.match(/\b(\d+(?:[.,]\d+)?)\b/)
     if (amtMatch) parsed = { intent: 'add_income', amount: parseFloat(amtMatch[1].replace(',', '.')), note: text }
   } else if (/\b(top.?up|topup|reload|tambah)\b/i.test(lower)) {
     const amtMatch = text.match(/rm\s*(\d+(?:[.,]\d+)?)/i) ?? text.match(/(\d+(?:[.,]\d+)?)/)
-    const accountMatch = text.match(/\bto\s+(.+)/i)
+    // Match "to X", "at X", "ke X", "untuk X" as the destination account
+    const accountMatch = text.match(/\b(?:to|at|ke|untuk)\s+(.+)/i)
     if (amtMatch) {
       const amount = parseFloat(amtMatch[1].replace(',', '.'))
       const account_name = accountMatch ? accountMatch[1].trim() : undefined
       parsed = { intent: 'topup', amount, account_name }
+    }
+  } else if (/^\d+(?:[.,]\d+)?\s+\S/.test(lower)) {
+    // Number-first expense: "9.70 for breakfast using ryt", "45.1 lunch using ryt"
+    const amtMatch = text.match(/^(\d+(?:[.,]\d+)?)/)
+    if (amtMatch) {
+      const amount = parseFloat(amtMatch[1].replace(',', '.'))
+      const usingMatch = text.match(/\b(?:using|via|through)\s+(\S+(?:\s+\S+)?)/i)
+      const atMatch = text.match(/\bat\s+(\S+(?:\s+\S+)?)/i)
+      const merchantRaw = (usingMatch ?? atMatch)?.[1]
+      const merchant = merchantRaw ? toTitleCase(merchantRaw.trim()) : null
+      const note = text
+        .replace(/^\d+(?:[.,]\d+)?/, '')
+        .replace(/\b(?:using|at|via|through)\s+\S+(?:\s+\S+)?/i, '')
+        .replace(/^\s*for\s+/i, '')
+        .replace(/\s+/g, ' ').trim() || null
+      parsed = { intent: 'add_expense', amount, merchant: merchant ?? undefined, note }
     }
   }
 
@@ -207,13 +278,21 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 256,
         system: `You are a parser for a personal finance app. Extract intent from the user's message.
-Return ONLY valid JSON.
+Return ONLY valid JSON with no explanation.
 
 Available bills: ${JSON.stringify(bills.map(b => ({ id: b.id, name: b.name, amount: b.amount })))}
 
+Examples of natural phrasings and their outputs:
+- "spent 45 at mamak" → {"intent":"add_expense","amount":45,"merchant":"mamak","note":null}
+- "9.70 for breakfast using ryt" → {"intent":"add_expense","amount":9.70,"merchant":"ryt","note":"breakfast"}
+- "45.1 lunch using ryt" → {"intent":"add_expense","amount":45.1,"merchant":"ryt","note":"lunch"}
+- "beli kopi 4.50" → {"intent":"add_expense","amount":4.50,"merchant":null,"note":"kopi"}
+- "received bonus 500" → {"intent":"add_income","amount":500,"note":"bonus"}
+- "topup 60 touch n go" → {"intent":"topup","amount":60,"account_name":"touch n go"}
+
 Return one of:
 {"intent":"mark_bill_paid","billId":"uuid","billName":"string"}
-{"intent":"add_expense","amount":number,"merchant":"string","note":"string|null"}
+{"intent":"add_expense","amount":number,"merchant":"string or null","note":"string or null"}
 {"intent":"add_income","amount":number,"note":"string"}
 {"intent":"check_balance","_":""}
 {"intent":"check_loans","_":""}
@@ -393,9 +472,10 @@ ${insight.signalReason}
 
   } else if (parsed.intent === 'add_expense') {
     const amount = parsed.amount ?? 0
-    const merchant = parsed.merchant ? toTitleCase(parsed.merchant) : 'Unknown'
-    await db.insert(financeTransactions).values({ userId, amount, currency: 'MYR', date: today, merchant, note: parsed.note ?? null, type: 'expense' })
-    await sendMessage(chatId, `✅ Logged RM${fmt(amount)} spent at ${merchant}`)
+    const merchant = parsed.merchant ? toTitleCase(parsed.merchant) : null
+    await db.insert(financeTransactions).values({ userId, amount, currency: 'MYR', date: today, merchant: merchant ?? 'Unknown', note: parsed.note ?? null, type: 'expense' })
+    const label = merchant ? `at ${merchant}` : parsed.note ? `— ${parsed.note}` : ''
+    await sendMessage(chatId, `✅ Logged RM${fmt(amount)} expense${label ? ' ' + label : ''}`)
 
   } else if (parsed.intent === 'add_income') {
     const amount = parsed.amount ?? 0
@@ -404,53 +484,51 @@ ${insight.signalReason}
 
   } else if (parsed.intent === 'topup') {
     const amount = parsed.amount ?? 0
-    const accountNameQuery = (parsed.account_name ?? '').toLowerCase().trim()
+    const accountNameQuery = parsed.account_name ? normalizeAccountName(parsed.account_name) : ''
 
-    // Fetch user's accounts
     const userAccounts = await db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId))
 
-    // Fuzzy match by name
-    let matched = accountNameQuery
-      ? userAccounts.find(a => a.name.toLowerCase().includes(accountNameQuery) || accountNameQuery.includes(a.name.toLowerCase()))
+    // Fuzzy match by normalized name (strips apostrophes and special chars)
+    const matched = accountNameQuery
+      ? userAccounts.find(a => {
+          const norm = normalizeAccountName(a.name)
+          return norm.includes(accountNameQuery) || accountNameQuery.includes(norm)
+        })
       : null
 
     if (!matched) {
+      // Save pending state so next reply can resolve the account
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+      await db.insert(telegramPending).values({
+        userId, intent: 'topup', data: JSON.stringify({ amount }), expiresAt,
+      }).onConflictDoUpdate({
+        target: telegramPending.userId,
+        set: { intent: 'topup', data: JSON.stringify({ amount }), expiresAt },
+      })
       const names = userAccounts.map(a => `• ${a.name}`).join('\n')
       await sendMessage(chatId, `Which account?\n${names || '(no accounts found)'}`)
       return
     }
 
-    // Create topup transaction
     await db.insert(financeTransactions).values({
-      userId,
-      accountId: matched.id,
-      amount,
-      currency: 'MYR',
-      date: today,
-      note: 'Top-up via Telegram',
-      type: 'topup',
+      userId, accountId: matched.id, amount, currency: 'MYR', date: today,
+      note: 'Top-up via Telegram', type: 'topup',
     })
 
-    // Sum topups this month for that account
     const [topupRow] = await db.select({
       total: sql<number>`coalesce(sum(${financeTransactions.amount}), 0)`,
-    }).from(financeTransactions)
-      .where(and(
-        eq(financeTransactions.userId, userId),
-        eq(financeTransactions.accountId, matched.id),
-        eq(financeTransactions.type, 'topup'),
-        sql`${financeTransactions.date} like ${monthStr + '-%'}`,
-      ))
+    }).from(financeTransactions).where(and(
+      eq(financeTransactions.userId, userId),
+      eq(financeTransactions.accountId, matched.id),
+      eq(financeTransactions.type, 'topup'),
+      sql`${financeTransactions.date} like ${monthStr + '-%'}`,
+    ))
 
     const toppedUpTotal = Number(topupRow?.total ?? 0)
 
     if (matched.monthlyAllocation) {
       const remaining = matched.monthlyAllocation - toppedUpTotal
-      await sendMessage(chatId, `Added RM${fmt(amount)} to ${matched.name}.
-
-Monthly budget: RM${fmt(matched.monthlyAllocation)}
-Topped up: RM${fmt(toppedUpTotal)} this month
-Remaining: RM${fmt(remaining)}`)
+      await sendMessage(chatId, `Added RM${fmt(amount)} to ${matched.name}.\n\nMonthly budget: RM${fmt(matched.monthlyAllocation)}\nTopped up: RM${fmt(toppedUpTotal)} this month\nRemaining: RM${fmt(remaining)}`)
     } else {
       await sendMessage(chatId, `Added RM${fmt(amount)} to ${matched.name}.`)
     }
