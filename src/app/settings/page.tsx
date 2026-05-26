@@ -352,6 +352,7 @@ export default function SettingsPage() {
           otherDeductions: salaryData.otherDeductions ?? undefined,
           effectiveFrom: firstOfMonth,
         })
+        setFillKey(k => k + 1)
       }
       if (settingsData?.payDay) {
         setPayDay(settingsData.payDay)
@@ -380,6 +381,8 @@ export default function SettingsPage() {
         setParseError(data.error ?? 'Failed to parse payslip')
         return
       }
+      const today = new Date()
+      const firstOfMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
       setDefaults({
         grossAmount: data.grossAmount || undefined,
         epfEmployee: data.epfEmployee || undefined,
@@ -387,7 +390,7 @@ export default function SettingsPage() {
         eis: data.eis || undefined,
         pcb: data.pcb || undefined,
         otherDeductions: data.otherDeductions || undefined,
-        effectiveFrom: data.effectiveFrom || undefined,
+        effectiveFrom: firstOfMonth,
       })
       setFillKey(k => k + 1)
       setParseSuccess(true)
