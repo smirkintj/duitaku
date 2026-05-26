@@ -266,6 +266,8 @@ export default function SettingsPage() {
   const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'deleting'>('idle')
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [logIncomePrompt, setLogIncomePrompt] = useState<{ amount: number } | null>(null)
+  const [loggingIncome, setLoggingIncome] = useState(false)
   const [normalizing, setNormalizing] = useState(false)
   const [normalizeResult, setNormalizeResult] = useState<string | null>(null)
 
@@ -438,6 +440,27 @@ export default function SettingsPage() {
     setCurrent({ amount: values.amount, grossAmount: values.grossAmount })
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+    // Check if salary income has been logged this month
+    const now = new Date()
+    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const res = await fetch(`/api/transactions?m=${monthStr}&type=income`)
+    const txns = await res.json() as { type: string; merchant: string | null }[]
+    const alreadyLogged = txns.some(t => t.type === 'income' && t.merchant === 'Salary')
+    if (!alreadyLogged && values.amount > 0) {
+      setLogIncomePrompt({ amount: values.amount })
+    }
+  }
+
+  async function handleLogIncome(amount: number) {
+    setLoggingIncome(true)
+    const today = new Date().toISOString().slice(0, 10)
+    await fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, date: today, type: 'income', merchant: 'Salary', currency: 'MYR' }),
+    })
+    setLoggingIncome(false)
+    setLogIncomePrompt(null)
   }
 
   const cardStyle: React.CSSProperties = {
@@ -464,6 +487,30 @@ export default function SettingsPage() {
           {saved && (
             <div style={{ padding: '12px 16px', background: 'rgba(163,230,53,0.08)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 10 }}>
               <span style={{ fontSize: 13, color: '#a3e635', ...S.sans, fontWeight: 500 }}>Salary updated successfully.</span>
+            </div>
+          )}
+
+          {logIncomePrompt && (
+            <div style={{ padding: '16px 20px', background: '#111', border: '1px solid rgba(163,230,53,0.25)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.sans, marginBottom: 3 }}>Log this month&apos;s salary income?</div>
+                <div style={{ fontSize: 12, color: '#7a7a78', ...S.sans }}>RM {logIncomePrompt.amount.toLocaleString('en-MY', { minimumFractionDigits: 2 })} will be added as income for today</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button
+                  onClick={() => handleLogIncome(logIncomePrompt.amount)}
+                  disabled={loggingIncome}
+                  style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: loggingIncome ? 'not-allowed' : 'pointer', ...S.sans }}
+                >
+                  {loggingIncome ? 'Logging…' : 'Yes, log it'}
+                </button>
+                <button
+                  onClick={() => setLogIncomePrompt(null)}
+                  style={{ background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 8, padding: '8px 16px', fontSize: 13, color: '#7a7a78', cursor: 'pointer', ...S.sans }}
+                >
+                  Skip
+                </button>
+              </div>
             </div>
           )}
 

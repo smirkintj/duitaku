@@ -16,6 +16,7 @@ interface Transaction {
   merchant: string | null
   note: string | null
   categoryId: string | null
+  accountId: string | null
   isRecurring: boolean
 }
 
@@ -58,6 +59,7 @@ function TransactionsContent() {
   const now = new Date()
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const month = sp.get('m') ?? defaultMonth
+  const accountFilter = sp.get('account') ?? null
 
   const [txs, setTxs] = useState<Transaction[]>([])
   const [cats, setCats] = useState<Category[]>([])
@@ -67,6 +69,7 @@ function TransactionsContent() {
   const [showModal, setShowModal] = useState(false)
   const [editTx, setEditTx] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [editingCatTxId, setEditingCatTxId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -85,6 +88,7 @@ function TransactionsContent() {
 
   const filtered = useMemo(() => txs.filter(tx => {
     if (tab !== 'all' && tx.type !== tab) return false
+    if (accountFilter && (tx as Transaction & { accountId?: string | null }).accountId !== accountFilter) return false
     if (search) {
       const q = search.toLowerCase()
       const name = (tx.merchant ?? tx.note ?? '').toLowerCase()
@@ -92,7 +96,7 @@ function TransactionsContent() {
       if (!name.includes(q) && !cat.includes(q)) return false
     }
     return true
-  }), [txs, tab, search, catMap])
+  }), [txs, tab, search, catMap, accountFilter])
 
   const totalExpense = useMemo(() => txs.filter(t => t.type === 'expense').reduce((a, t) => a + t.amount, 0), [txs])
   const totalIncome = useMemo(() => txs.filter(t => t.type === 'income').reduce((a, t) => a + t.amount, 0), [txs])
@@ -165,6 +169,19 @@ function TransactionsContent() {
           </div>
         </div>
 
+        {/* Account filter banner */}
+        {accountFilter && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(163,230,53,0.06)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 8, padding: '8px 14px' }}>
+            <span style={{ fontSize: 12, color: '#a3e635', ...S.mono, letterSpacing: '0.06em' }}>FILTERED BY ACCOUNT</span>
+            <button
+              onClick={() => router.push(`/transactions?m=${month}`)}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#5b5b59', fontSize: 12, ...S.sans }}
+            >
+              Clear ×
+            </button>
+          </div>
+        )}
+
         {/* List */}
         {!loading && txs.length === 0 ? (
           <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 16, padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -216,6 +233,7 @@ function TransactionsContent() {
                   const cat = tx.categoryId ? catMap.get(tx.categoryId) : undefined
                   const effectiveMerchant = tx.merchant && tx.merchant !== 'Unknown' ? tx.merchant : null
                   const label = effectiveMerchant ?? tx.note ?? '—'
+                  const expCats = cats.filter(c => c.type === tx.type || c.type === 'both')
                   return (
                     <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '13px 20px', borderBottom: i < filtered.length - 1 ? '1px solid #141414' : 'none', alignItems: 'center' }}>
                       <span style={{ fontSize: 11, color: '#7a7a78', ...S.mono }}>{fmtDate(tx.date)}</span>
@@ -223,9 +241,37 @@ function TransactionsContent() {
                         <span style={{ fontSize: 13, color: '#f5f5f4', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
                         {tx.isRecurring && <span style={{ fontSize: 9, color: '#a3e635', ...S.mono, letterSpacing: '0.06em' }}>RECURRING</span>}
                       </div>
-                      <span style={{ fontSize: 12, color: '#5b5b59', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {cat?.name ?? '—'}
-                      </span>
+                      {editingCatTxId === tx.id ? (
+                        <select
+                          autoFocus
+                          defaultValue={tx.categoryId ?? ''}
+                          onChange={async e => {
+                            const newCatId = e.target.value || null
+                            setEditingCatTxId(null)
+                            await fetch(`/api/transactions/${tx.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ categoryId: newCatId }),
+                            })
+                            load()
+                          }}
+                          onBlur={() => setEditingCatTxId(null)}
+                          style={{ fontSize: 11, background: '#0d0d0d', border: '1px solid #a3e635', borderRadius: 6, padding: '4px 8px', color: '#f5f5f4', ...S.sans, outline: 'none', width: '100%', colorScheme: 'dark' }}
+                        >
+                          <option value="">No category</option>
+                          {expCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      ) : (
+                        <span
+                          onClick={() => setEditingCatTxId(tx.id)}
+                          title="Click to assign category"
+                          style={{ fontSize: 12, color: cat ? '#d0d0cf' : '#2a2a2a', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', borderBottom: cat ? 'none' : '1px dashed #2a2a2a' }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLSpanElement).style.color = '#a3e635' }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLSpanElement).style.color = cat ? '#d0d0cf' : '#2a2a2a' }}
+                        >
+                          {cat?.name ?? '+ add'}
+                        </span>
+                      )}
                       <span style={{ fontSize: 13, fontWeight: 600, color: tx.type === 'income' ? '#a3e635' : '#f5f5f4', ...S.sans, textAlign: 'right' }}>
                         {tx.type === 'income' ? '+' : '−'} RM {tx.amount.toFixed(2)}
                       </span>

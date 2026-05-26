@@ -30,6 +30,7 @@ export default function AddTransactionModal({ onClose, onSuccess }: AddTransacti
   const [loading, setLoading] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [suggestedCatId, setSuggestedCatId] = useState<string | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -58,6 +59,16 @@ export default function AddTransactionModal({ onClose, onSuccess }: AddTransacti
   }, [onClose])
 
   const filteredCategories = categories.filter((c) => c.type === type || c.type === 'both')
+
+  async function handleMerchantBlur() {
+    if (!merchant.trim() || categoryId) return
+    const res = await fetch(`/api/merchants/suggest-category?q=${encodeURIComponent(merchant.trim())}`)
+    const { categoryId: suggested } = await res.json() as { categoryId: string | null }
+    if (suggested) {
+      setSuggestedCatId(suggested)
+      setCategoryId(suggested)
+    }
+  }
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -217,10 +228,15 @@ export default function AddTransactionModal({ onClose, onSuccess }: AddTransacti
 
           {/* Category */}
           <div>
-            <label style={labelStyle}>Category</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Category</label>
+              {suggestedCatId && categoryId === suggestedCatId && (
+                <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: '#a3e635', background: 'rgba(163,230,53,0.1)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 4, padding: '1px 5px', letterSpacing: '0.06em' }}>SUGGESTED</span>
+              )}
+            </div>
             <select
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              onChange={(e) => { setCategoryId(e.target.value); setSuggestedCatId(null) }}
               style={inputStyle}
             >
               <option value="">Uncategorized</option>
@@ -248,7 +264,8 @@ export default function AddTransactionModal({ onClose, onSuccess }: AddTransacti
             <input
               type="text"
               value={merchant}
-              onChange={(e) => setMerchant(e.target.value)}
+              onChange={(e) => { setMerchant(e.target.value); setSuggestedCatId(null) }}
+              onBlur={handleMerchantBlur}
               placeholder="e.g. Grab, Starbucks..."
               style={inputStyle}
             />

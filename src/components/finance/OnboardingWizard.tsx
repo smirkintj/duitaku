@@ -39,17 +39,17 @@ const ACCOUNT_TYPES = [
   { value: 'credit', label: 'Credit card', desc: 'Track spending and statements' },
 ]
 
-// Total steps shown in progress bar (Welcome + Account + Bill + Done)
-const TOTAL_STEPS = 4
+// Total steps shown in progress bar (Welcome + Account + Salary + Bill + Done)
+const TOTAL_STEPS = 5
 
 export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Props) {
   const [visible, setVisible] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [fade, setFade] = useState(true)
 
-  // If user already has accounts (step 3), start at the "add transactions" prompt (step 3)
+  // If user already has accounts (step 3), start at the "add transactions" prompt (step 4)
   // Otherwise start at welcome (step 1)
-  const startStep = onboardingStep === 3 ? 3 : 1
+  const startStep = onboardingStep === 3 ? 4 : 1
   const [step, setStep] = useState(startStep)
 
   // Account step state
@@ -58,6 +58,11 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
   const [acctBalance, setAcctBalance] = useState('')
   const [savingAcct, setSavingAcct] = useState(false)
   const [acctError, setAcctError] = useState('')
+
+  // Salary step state
+  const [payDay, setPayDay] = useState('27')
+  const [grossSalary, setGrossSalary] = useState('')
+  const [savingSalary, setSavingSalary] = useState(false)
 
   // Bill step state
   const [billName, setBillName] = useState('')
@@ -75,7 +80,7 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
 
   // Keep startStep in sync if onboardingStep arrives late
   useEffect(() => {
-    if (onboardingStep === 3) setStep(3)
+    if (onboardingStep === 3) setStep(4)
   }, [onboardingStep])
 
   if (!mounted || !visible) return null
@@ -105,9 +110,31 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
     goToStep(3)
   }
 
+  async function handleSaveSalary() {
+    const gross = parseFloat(grossSalary)
+    if (!grossSalary || isNaN(gross) || gross <= 0) { goToStep(4); return }
+    setSavingSalary(true)
+    try {
+      await Promise.all([
+        fetch('/api/salary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grossAmount: gross, currency: 'MYR' }),
+        }),
+        fetch('/api/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payDay: parseInt(payDay) }),
+        }),
+      ])
+    } catch { /* continue */ }
+    setSavingSalary(false)
+    goToStep(4)
+  }
+
   async function handleSaveBill() {
     const amt = parseFloat(billAmount)
-    if (!billName || !billAmount || isNaN(amt) || amt <= 0) { goToStep(4); return }
+    if (!billName || !billAmount || isNaN(amt) || amt <= 0) { goToStep(5); return }
     setSavingBill(true)
     try {
       await fetch('/api/bills', {
@@ -117,12 +144,12 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
       })
     } catch { /* continue */ }
     setSavingBill(false)
-    goToStep(4)
+    goToStep(5)
   }
 
   function ProgressDots() {
     // Only show dots for the full flow (not when joining mid-flow)
-    if (startStep === 3) return null
+    if (startStep === 4) return null
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 28 }}>
         {Array.from({ length: TOTAL_STEPS }).map((_, i) => {
@@ -213,12 +240,47 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
           </div>
         )}
 
-        {/* Step 3 — Bills */}
+        {/* Step 3 — Salary */}
         {step === 3 && (
           <div>
-            <Header label={startStep === 3 ? 'QUICK SETUP' : 'STEP 2 OF 3 — BILLS'} />
+            <Header label="STEP 2 OF 4 — SALARY" />
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', ...S.sans, margin: '0 0 8px', letterSpacing: '-0.02em' }}>When do you get paid?</h2>
+            <p style={{ fontSize: 13, color: '#7a7a78', ...S.sans, margin: '0 0 22px', lineHeight: 1.6 }}>
+              This sets your monthly budget cycle. Your dashboard resets on pay day.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.06em', marginBottom: 6 }}>PAY DAY (day of month)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {[1, 5, 10, 15, 20, 25, 27, 28, 30].map(d => (
+                    <button key={d} type="button" onClick={() => setPayDay(String(d))}
+                      style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${payDay === String(d) ? '#a3e635' : '#2a2a2a'}`, background: payDay === String(d) ? 'rgba(163,230,53,0.08)' : 'transparent', color: payDay === String(d) ? '#a3e635' : '#7a7a78', cursor: 'pointer', fontSize: 13, fontFamily: '"JetBrains Mono", monospace' }}>
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 10, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.06em', marginBottom: 6 }}>GROSS MONTHLY SALARY (RM, optional)</label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: '#5b5b59', ...S.mono, pointerEvents: 'none' }}>RM</span>
+                  <input autoFocus type="number" min={0} value={grossSalary} onChange={e => setGrossSalary(e.target.value)} placeholder="e.g. 5000" style={{ ...inputStyle, paddingLeft: 44 }} onKeyDown={e => e.key === 'Enter' && handleSaveSalary()} />
+                </div>
+              </div>
+            </div>
+            <button style={{ ...primaryBtn, background: savingSalary ? '#1a1a1a' : '#a3e635', color: savingSalary ? '#3a3a3a' : '#0d0d0d', cursor: savingSalary ? 'not-allowed' : 'pointer' }} onClick={handleSaveSalary} disabled={savingSalary}>
+              {savingSalary ? 'Saving…' : 'Save & continue →'}
+            </button>
+            <button style={skipBtn} onClick={() => goToStep(4)}>Skip for now</button>
+          </div>
+        )}
+
+        {/* Step 4 — Bills */}
+        {step === 4 && (
+          <div>
+            <Header label={startStep === 4 ? 'QUICK SETUP' : 'STEP 3 OF 4 — BILLS'} />
             <h2 style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', ...S.sans, margin: '0 0 8px', letterSpacing: '-0.02em' }}>
-              {startStep === 3 ? 'One last thing — fixed bills?' : 'Any fixed monthly payments?'}
+              {startStep === 4 ? 'One last thing — fixed bills?' : 'Any fixed monthly payments?'}
             </h2>
             <p style={{ fontSize: 13, color: '#7a7a78', ...S.sans, margin: '0 0 22px', lineHeight: 1.6 }}>
               Rent, subscriptions, phone plan — add one now. You can always add more later.
@@ -233,14 +295,14 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
             <button style={{ ...primaryBtn, background: savingBill ? '#1a1a1a' : '#a3e635', color: savingBill ? '#3a3a3a' : '#0d0d0d', cursor: savingBill ? 'not-allowed' : 'pointer' }} onClick={handleSaveBill} disabled={savingBill}>
               {savingBill ? 'Saving…' : 'Add bill & continue →'}
             </button>
-            <button style={skipBtn} onClick={() => goToStep(4)}>Skip for now</button>
+            <button style={skipBtn} onClick={() => goToStep(5)}>Skip for now</button>
           </div>
         )}
 
-        {/* Step 4 — Done */}
-        {step === 4 && (
+        {/* Step 5 — Done */}
+        {step === 5 && (
           <div>
-            <Header label="STEP 3 OF 3 — TRANSACTIONS" />
+            <Header label="STEP 4 OF 4 — TRANSACTIONS" />
             <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(163,230,53,0.1)', border: '1px solid rgba(163,230,53,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a3e635" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
             </div>

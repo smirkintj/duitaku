@@ -31,6 +31,7 @@ interface Account {
   type: string
   currency: string
   initialBalance: number
+  currentBalance: number | null
   creditLimit: number | null
   currentOutstanding: number | null
   statementDueDay: number | null
@@ -392,14 +393,16 @@ function CreditCardVisual({ account }: { account: Account }) {
 // ─── Bank / Cash Card ────────────────────────────────────────────────────────
 
 function BankCard({ account, onUpdated }: { account: Account; onUpdated: () => void }) {
-  const typeLabel = account.type === 'cash' ? 'CASH' : 'BANK ACCOUNT'
+  const typeLabel = account.type === 'cash' ? 'CASH / E-WALLET' : 'BANK ACCOUNT'
   const typeColor = account.type === 'cash' ? '#fbbf24' : '#a3e635'
+  const liveBalance = account.currentBalance ?? account.initialBalance
+  const hasActivity = account.currentBalance !== null && account.currentBalance !== account.initialBalance
 
   return (
     <div>
       <div
         style={{
-          borderRadius: account.monthlyAllocation != null || true ? '14px 14px 0 0' : 14,
+          borderRadius: '14px 14px 0 0',
           border: '1px solid #1a1a1a',
           borderBottom: 'none',
           background: '#111',
@@ -415,15 +418,33 @@ function BankCard({ account, onUpdated }: { account: Account; onUpdated: () => v
           <div style={{ fontSize: 12, color: '#5b5b59', ...S.sans, marginTop: 2 }}>{account.currency}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ ...S.label, marginBottom: 4 }}>BALANCE</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', ...S.sans, letterSpacing: '-0.02em' }}>
-            RM {fmt(account.initialBalance)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', marginBottom: 4 }}>
+            <div style={{ ...S.label }}>BALANCE</div>
+            {hasActivity && (
+              <span style={{ fontSize: 8, ...S.mono, color: '#a3e635', background: 'rgba(163,230,53,0.1)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 4, padding: '1px 5px', letterSpacing: '0.06em' }}>LIVE</span>
+            )}
           </div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', ...S.sans, letterSpacing: '-0.02em' }}>
+            RM {fmt(liveBalance)}
+          </div>
+          {hasActivity && (
+            <div style={{ fontSize: 10, color: '#3a3a3a', ...S.mono, marginTop: 2 }}>
+              opening RM {fmt(account.initialBalance)}
+            </div>
+          )}
         </div>
       </div>
-      <div style={{ border: '1px solid #1a1a1a', borderTop: '1px solid #141414', borderRadius: '0 0 14px 14px', background: '#0f0f0f', padding: '0 0 0 0' }}>
+      <div style={{ border: '1px solid #1a1a1a', borderTop: '1px solid #141414', background: '#0f0f0f', padding: '0' }}>
         <MonthlyAllocationBar account={account} onUpdated={onUpdated} />
       </div>
+      <a
+        href={`/transactions?account=${account.id}`}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', borderRadius: '0 0 14px 14px', border: '1px solid #1a1a1a', borderTop: 'none', background: '#0a0a0a', fontSize: 11, color: '#5b5b59', ...S.mono, letterSpacing: '0.06em', textDecoration: 'none', transition: 'color 140ms, background 140ms' }}
+        onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = '#a3e635'; (e.currentTarget as HTMLAnchorElement).style.background = '#0d120800'.replace('00', '1a') }}
+        onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = '#5b5b59'; (e.currentTarget as HTMLAnchorElement).style.background = '#0a0a0a' }}
+      >
+        VIEW TRANSACTIONS →
+      </a>
     </div>
   )
 }

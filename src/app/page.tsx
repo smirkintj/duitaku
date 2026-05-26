@@ -409,12 +409,26 @@ export default async function HomePage({ searchParams }: PageProps) {
       actionLabel: 'Add loan',
     },
   ]
+  const uncategorizedExpenseCount = monthTxs.filter(t => t.type === 'expense' && !t.categoryId).length
+
+  if (uncategorizedExpenseCount > 3) {
+    allNudges.push({
+      id: 'categorize',
+      step: allNudges.length + 1,
+      title: `${uncategorizedExpenseCount} expenses without a category`,
+      body: "Assign categories so the dashboard can show where your money actually went. Click the category cell on any row to assign one instantly.",
+      href: '/transactions',
+      actionLabel: 'Categorise now',
+    })
+  }
+
   const activeNudges = allNudges.filter(n => {
     if (n.id === 'transactions') return monthTxs.filter(t => t.type === 'expense').length === 0
     if (n.id === 'bills') return activeBills.length === 0
     if (n.id === 'cc') return ccAccountRows.length === 0
     if (n.id === 'investments') return investmentRows.length === 0
     if (n.id === 'loans') return loanRows.length === 0
+    if (n.id === 'categorize') return true
     return false
   })
 
