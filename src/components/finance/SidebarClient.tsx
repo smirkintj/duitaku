@@ -87,7 +87,15 @@ export default function SidebarClient() {
       return
     }
     const route = ROUTE_MAP[key]
-    if (route) router.push(route)
+    if (!route) return
+    // Preserve the ?m= cycle param when navigating between cycle-aware pages
+    const cycleAware = new Set(['dashboard', 'transactions', 'cashflow', 'trends'])
+    if (cycleAware.has(key)) {
+      const m = new URLSearchParams(window.location.search).get('m')
+      router.push(m ? `${route}?m=${m}` : route)
+    } else {
+      router.push(route)
+    }
   }
 
   async function handleLogout() {
