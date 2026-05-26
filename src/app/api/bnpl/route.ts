@@ -9,9 +9,16 @@ export async function GET(request: Request) {
   if (!userId) return unauthorized()
 
   const rows = await db.select().from(financeBnpl)
-    .where(and(eq(financeBnpl.userId, userId), eq(financeBnpl.isActive, true)))
+    .where(eq(financeBnpl.userId, userId))
     .orderBy(asc(financeBnpl.createdAt))
-  return Response.json(rows.map(({ userId: _, ...r }) => r))
+  // Sort: active plans first, fully-paid plans last
+  const sorted = [...rows].sort((a, b) => {
+    const aDone = a.paidInstallments >= a.totalInstallments
+    const bDone = b.paidInstallments >= b.totalInstallments
+    if (aDone !== bDone) return aDone ? 1 : -1
+    return 0
+  })
+  return Response.json(sorted.map(({ userId: _, ...r }) => r))
 }
 
 export async function POST(request: Request) {

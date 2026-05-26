@@ -467,6 +467,7 @@ export default function BillsPage() {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
               {bnpl.map(plan => {
+                  const isCompleted = plan.paidInstallments >= plan.totalInstallments
                   const remaining = (plan.totalInstallments - plan.paidInstallments) * plan.installmentAmount
                   const progress = plan.paidInstallments / plan.totalInstallments
                   const now = new Date()
@@ -474,23 +475,39 @@ export default function BillsPage() {
                   const [sy, sm] = plan.startMonth.split('-').map(Number)
                   const startIdx = sy * 12 + sm
                   const endIdx = startIdx + plan.totalInstallments - 1
-                  const activeThisMonth = curIdx >= startIdx && curIdx <= endIdx
-                  const notStartedYet = curIdx < startIdx
+                  const activeThisMonth = !isCompleted && curIdx >= startIdx && curIdx <= endIdx
+                  const notStartedYet = !isCompleted && curIdx < startIdx
+                  // Has the current month's installment already been logged?
+                  const installmentsDueNow = Math.max(0, Math.min(curIdx - startIdx + 1, plan.totalInstallments))
+                  const thisMonthPaid = activeThisMonth && plan.paidInstallments >= installmentsDueNow
                   const linkedAccount = plan.accountId ? accounts.find(a => a.id === plan.accountId) : null
+
+                  const cardBorder = isCompleted ? '#1a2a1a' : notStartedYet ? '#1f2a1a' : '#1a1a1a'
+
                   return (
-                    <div key={plan.id} style={{ background: '#111', border: `1px solid ${notStartedYet ? '#1f2a1a' : '#1a1a1a'}`, borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div key={plan.id} style={{ background: '#111', border: `1px solid ${cardBorder}`, borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 14, opacity: isCompleted ? 0.72 : 1 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: providerColor(plan.provider), border: `1px solid ${providerColor(plan.provider)}40`, borderRadius: 4, padding: '2px 6px' }}>
                               {providerLabel(plan.provider)}
                             </span>
+                            {isCompleted && (
+                              <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: '#a3e635', border: '1px solid rgba(163,230,53,0.3)', borderRadius: 4, padding: '2px 6px' }}>
+                                FULLY PAID
+                              </span>
+                            )}
+                            {thisMonthPaid && (
+                              <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: '#a3e635', border: '1px solid rgba(163,230,53,0.3)', borderRadius: 4, padding: '2px 6px' }}>
+                                PAID THIS MONTH
+                              </span>
+                            )}
                             {notStartedYet && (
                               <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', color: '#a3e635', border: '1px solid rgba(163,230,53,0.3)', borderRadius: 4, padding: '2px 6px' }}>
                                 STARTS {fmtMonth(plan.startMonth)}
                               </span>
                             )}
-                            {!notStartedYet && (
+                            {!isCompleted && !notStartedYet && (
                               <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: '#5b5b59', letterSpacing: '0.06em' }}>
                                 FROM {fmtMonth(plan.startMonth)}
                               </span>
@@ -501,7 +518,7 @@ export default function BillsPage() {
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: 15, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>{plan.merchant}</div>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: isCompleted ? '#7a7a78' : '#f5f5f4', ...S.sans }}>{plan.merchant}</div>
                           {plan.notes && <div style={{ fontSize: 11, color: '#5b5b59', ...S.sans, marginTop: 2 }}>{plan.notes}</div>}
                         </div>
                         <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
@@ -530,23 +547,31 @@ export default function BillsPage() {
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                           <span style={{ ...S.label }}>{plan.paidInstallments}/{plan.totalInstallments} INSTALLMENTS</span>
-                          <span style={{ ...S.label }}>RM {remaining.toFixed(2)} LEFT</span>
+                          <span style={{ ...S.label }}>{isCompleted ? 'DONE' : `RM ${remaining.toFixed(2)} LEFT`}</span>
                         </div>
                         <div style={{ height: 4, background: '#1a1a1a', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${Math.min(progress * 100, 100)}%`, background: '#a3e635', borderRadius: 2, transition: 'width 400ms ease' }} />
+                          <div style={{ height: '100%', width: `${Math.min(progress * 100, 100)}%`, background: isCompleted ? '#4a7a20' : '#a3e635', borderRadius: 2, transition: 'width 400ms ease' }} />
                         </div>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: notStartedYet ? '#5b5b59' : '#f5f5f4', ...S.sans, letterSpacing: '-0.02em' }}>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: isCompleted ? '#3a3a3a' : notStartedYet ? '#5b5b59' : '#f5f5f4', ...S.sans, letterSpacing: '-0.02em' }}>
                             RM {plan.installmentAmount.toFixed(2)}
                           </div>
                           <div style={{ fontSize: 10, color: '#5b5b59', ...S.mono, letterSpacing: '0.06em' }}>
-                            {notStartedYet ? `STARTS IN ${startIdx - curIdx} MONTH${startIdx - curIdx > 1 ? 'S' : ''}` : activeThisMonth ? `INSTALLMENT ${curIdx - startIdx + 1}/${plan.totalInstallments}` : 'PER INSTALLMENT'}
+                            {isCompleted ? 'ALL INSTALLMENTS PAID' : notStartedYet ? `STARTS IN ${startIdx - curIdx} MONTH${startIdx - curIdx > 1 ? 'S' : ''}` : activeThisMonth ? `INSTALLMENT ${curIdx - startIdx + 1}/${plan.totalInstallments}` : 'PER INSTALLMENT'}
                           </div>
                         </div>
-                        {plan.paidInstallments < plan.totalInstallments ? (
+                        {isCompleted ? (
+                          <button disabled style={{ background: 'transparent', color: '#a3e635', border: '1px solid rgba(163,230,53,0.25)', borderRadius: 8, padding: '8px 16px', cursor: 'default', fontSize: 12, fontWeight: 600, ...S.sans }}>
+                            Fully Paid
+                          </button>
+                        ) : thisMonthPaid ? (
+                          <button disabled style={{ background: 'rgba(163,230,53,0.08)', color: '#a3e635', border: '1px solid rgba(163,230,53,0.25)', borderRadius: 8, padding: '8px 16px', cursor: 'default', fontSize: 12, fontWeight: 600, ...S.sans }}>
+                            Paid this month
+                          </button>
+                        ) : (
                           <button
                             onClick={() => payBnpl(plan.id)}
                             disabled={payingBnpl === plan.id}
@@ -554,8 +579,6 @@ export default function BillsPage() {
                           >
                             {payingBnpl === plan.id ? 'Paying…' : `Pay RM ${plan.installmentAmount.toFixed(2)}`}
                           </button>
-                        ) : (
-                          <span style={{ fontSize: 10, color: '#a3e635', ...S.mono, letterSpacing: '0.06em' }}>COMPLETED</span>
                         )}
                       </div>
                     </div>
