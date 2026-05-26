@@ -1,29 +1,23 @@
 import { db } from '@/db'
-import { financeTransactions } from '@/db/schema'
-import { isNotNull, sql } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
+import { getUserIdFromRequest } from '@/lib/get-user-id'
 
-// Admin-only: POST /api/admin/normalize-merchants?secret=ADMIN_SECRET
-// Normalizes existing transaction merchant names:
-//   - Title-cases all non-null merchants
+// POST /api/admin/normalize-merchants
+// Normalizes the calling user's transaction merchant names:
 //   - Clears merchant='Unknown' (display falls back to note)
+//   - Title-cases all remaining merchant names
 export async function POST(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const secret = searchParams.get('secret')
-  const adminSecret = process.env.ADMIN_SECRET
-  if (!adminSecret || secret !== adminSecret) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const userId = await getUserIdFromRequest(request)
+  if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Clear 'Unknown' merchants so note is used as display label
   const clearedResult = await db.execute(
-    sql`UPDATE finance_transactions SET merchant = NULL WHERE merchant = 'Unknown'`
+    sql`UPDATE finance_transactions SET merchant = NULL WHERE user_id = ${userId} AND merchant = 'Unknown'`
   )
 
-  // Title-case all remaining merchants
   const titleCaseResult = await db.execute(
     sql`UPDATE finance_transactions
         SET merchant = initcap(lower(merchant))
-        WHERE merchant IS NOT NULL`
+        WHERE user_id = ${userId} AND merchant IS NOT NULL`
   )
 
   return Response.json({

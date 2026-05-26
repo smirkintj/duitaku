@@ -266,6 +266,19 @@ export default function SettingsPage() {
   const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'deleting'>('idle')
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [normalizing, setNormalizing] = useState(false)
+  const [normalizeResult, setNormalizeResult] = useState<string | null>(null)
+
+  async function handleNormalizeMerchants() {
+    setNormalizing(true)
+    setNormalizeResult(null)
+    try {
+      const res = await fetch('/api/admin/normalize-merchants', { method: 'POST' })
+      const data = await res.json() as { cleared_unknown?: number; title_cased?: number; error?: string }
+      if (data.error) { setNormalizeResult(`Error: ${data.error}`); return }
+      setNormalizeResult(`Done — ${data.cleared_unknown} "Unknown" cleared, ${data.title_cased} merchants normalised`)
+    } catch { setNormalizeResult('Request failed') } finally { setNormalizing(false) }
+  }
 
   // Telegram state
   const [tgConnected, setTgConnected] = useState<boolean | null>(null)
@@ -750,7 +763,25 @@ export default function SettingsPage() {
           {/* ── ROW 4: Investment Preferences ── */}
           <InvestmentPrefsCard />
 
-          {/* ── ROW 5: Danger Zone ── */}
+          {/* ── ROW 5: Data Tools ── */}
+          <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '24px 28px' }}>
+            <div style={{ ...S.label, marginBottom: 6 }}>DATA TOOLS</div>
+            <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans, marginBottom: 16, lineHeight: 1.6 }}>
+              Fix merchant names from older Telegram entries — removes "Unknown" labels and standardises capitalisation (e.g. "ryt" → "Ryt").
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                onClick={handleNormalizeMerchants}
+                disabled={normalizing}
+                style={{ fontSize: 13, padding: '8px 18px', background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 8, color: normalizing ? '#5b5b59' : '#e5e5e5', cursor: normalizing ? 'not-allowed' : 'pointer', ...S.sans }}
+              >
+                {normalizing ? 'Normalising…' : 'Fix merchant names'}
+              </button>
+              {normalizeResult && <span style={{ fontSize: 12, color: normalizeResult.startsWith('Error') ? '#ef4444' : '#a3e635', ...S.sans }}>{normalizeResult}</span>}
+            </div>
+          </div>
+
+          {/* ── ROW 6: Danger Zone ── */}
           <div style={{ background: '#111', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 14, padding: '24px 28px' }}>
             <div style={{ ...S.label, color: '#ef4444', marginBottom: 6 }}>DANGER ZONE</div>
             <div style={{ fontSize: 13, color: '#7a7a78', ...S.sans, marginBottom: 20, lineHeight: 1.6 }}>
