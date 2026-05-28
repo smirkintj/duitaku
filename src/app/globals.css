@@ -25,3 +25,66 @@ html, body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Mobile layout ───────────────────────────────── */
+
+/* Hide desktop sidebar on mobile */
+@media (max-width: 767px) {
+  .sidebar-desktop {
+    display: none !important;
+  }
+
+  .mobile-hamburger {
+    display: flex !important;
+  }
+
+  .sidebar-mobile-overlay {
+    display: flex !important;
+  }
+
+  .bottom-nav {
+    display: flex !important;
+  }
+
+  /* Reduce page padding on mobile */
+  main.page-main {
+    padding: 16px 16px 88px !important;
+  }
+
+  /* Bill 2-col → 1-col */
+  .bills-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 400px) {
+  main.page-main {
+    padding: 12px 12px 88px !important;
+  }
+}
+
+/* Hidden on desktop, shown on mobile via above media queries */
+.mobile-hamburger {
+  display: none;
+}
+
+.sidebar-mobile-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #0a0a0a;
+  border-top: 1px solid #1a1a1a;
+  padding: 8px 0 env(safe-area-inset-bottom, 8px);
+  justify-content: space-around;
+  align-items: center;
+}

@@ -10,6 +10,8 @@ interface NetWorthData {
     accounts: number
     investments: number
     savings: number
+    liquid: number
+    illiquid: number
     total: number
   }
   liabilities: {
@@ -57,6 +59,11 @@ export default function NetWorthWidget({ month: _month }: NetWorthWidgetProps) {
   const totalSum = assets.total + liabilities.total
   const assetsPct = totalSum > 0 ? (assets.total / totalSum) * 100 : 50
   const liabPct = 100 - assetsPct
+
+  // Liquid vs illiquid breakdown
+  const hasLiquidSplit = (assets.liquid !== undefined || assets.illiquid !== undefined)
+  const liquidPct = assets.total > 0 ? (assets.liquid / assets.total) * 100 : 0
+  const illiquidPct = 100 - liquidPct
 
   const mask = (
     <span style={{ fontFamily: '"JetBrains Mono", monospace', color: '#3a3a3a', letterSpacing: '0.1em' }}>••••••</span>
@@ -122,6 +129,27 @@ export default function NetWorthWidget({ month: _month }: NetWorthWidgetProps) {
           <div style={{ width: '100%', background: '#2a2a2a', borderRadius: 3 }} />
         )}
       </div>
+
+      {/* Liquid / Illiquid split */}
+      {hasLiquidSplit && assets.total > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ ...S.label }}>ASSETS BREAKDOWN</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {assets.liquid > 0 && (
+              <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', color: '#34d399', background: '#34d39914', border: '1px solid #34d39930', borderRadius: 20, padding: '3px 10px' }}>
+                LIQUID {hidden ? '••••' : `RM ${formatRM(assets.liquid)}`} {liquidPct > 0 ? `· ${Math.round(liquidPct)}%` : ''}
+              </span>
+            )}
+            {assets.illiquid > 0 && (
+              <span style={{ fontSize: 10, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', color: '#fbbf24', background: '#fbbf2414', border: '1px solid #fbbf2430', borderRadius: 20, padding: '3px 10px' }}>
+                ILLIQUID {hidden ? '••••' : `RM ${formatRM(assets.illiquid)}`} {illiquidPct > 0 ? `· ${Math.round(illiquidPct)}%` : ''}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Debt breakdown pills */}
       {liabilities.total > 0 && (

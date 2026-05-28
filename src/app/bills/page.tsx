@@ -357,6 +357,69 @@ export default function BillsPage() {
             ))}
           </div>
 
+          {/* Bill due-date timeline */}
+          {bills.length > 0 && (() => {
+            const now = new Date()
+            const [ty, tm] = month.split('-').map(Number)
+            const isCurrentMonth = now.getFullYear() === ty && now.getMonth() + 1 === tm
+            const todayDay = now.getDate()
+            const daysInMonth = new Date(ty, tm, 0).getDate()
+            const sorted = [...bills].sort((a, b) => a.dueDay - b.dueDay)
+            return (
+              <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, padding: '16px 20px' }}>
+                <div style={{ ...S.label, marginBottom: 14 }}>DUE DATE TIMELINE — {fmtMonth(month)}</div>
+                {/* Month bar */}
+                <div style={{ position: 'relative', height: 4, background: '#1a1a1a', borderRadius: 2, marginBottom: 16 }}>
+                  {sorted.map(bill => {
+                    const pct = ((bill.dueDay - 1) / (daysInMonth - 1)) * 100
+                    const daysLeft = isCurrentMonth ? bill.dueDay - todayDay : null
+                    const isPast = daysLeft !== null && daysLeft < 0
+                    const isSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 3
+                    const dotColor = bill.paid ? '#3a7a3a' : isPast ? '#ef4444' : isSoon ? '#fbbf24' : '#a3e635'
+                    return (
+                      <div
+                        key={bill.id}
+                        title={`${bill.name} — ${ordinal(bill.dueDay)}`}
+                        style={{ position: 'absolute', left: `${pct}%`, top: '50%', transform: 'translate(-50%, -50%)', width: 8, height: 8, borderRadius: '50%', background: dotColor, border: '1px solid #0d0d0d' }}
+                      />
+                    )
+                  })}
+                  {isCurrentMonth && (
+                    <div
+                      style={{ position: 'absolute', left: `${((todayDay - 1) / (daysInMonth - 1)) * 100}%`, top: -4, bottom: -4, width: 1, background: '#5b5b59', borderRadius: 1 }}
+                      title="Today"
+                    />
+                  )}
+                </div>
+                {/* List sorted by due day */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  {sorted.map((bill, i) => {
+                    const daysLeft = isCurrentMonth ? bill.dueDay - todayDay : null
+                    const isPast = daysLeft !== null && daysLeft < 0
+                    const isSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 3
+                    const statusColor = bill.paid ? '#3a7a3a' : isPast ? '#ef4444' : isSoon ? '#fbbf24' : '#5b5b59'
+                    const statusLabel = bill.paid ? 'PAID' : daysLeft === null ? `DAY ${bill.dueDay}` : daysLeft < 0 ? `${Math.abs(daysLeft)}D OVERDUE` : daysLeft === 0 ? 'DUE TODAY' : `${daysLeft}D LEFT`
+                    return (
+                      <div key={bill.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: i < sorted.length - 1 ? '1px solid #141414' : 'none' }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 7, background: '#161616', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#7a7a78' }}>
+                          <CategoryIcon name={bill.icon as Parameters<typeof CategoryIcon>[0]['name']} width={14} height={14} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: bill.paid ? '#5b5b59' : '#d0d0cf', ...S.sans, textDecoration: bill.paid ? 'line-through' : 'none' }}>{bill.name}</div>
+                          <div style={{ fontSize: 10, color: '#5b5b59', ...S.mono }}>DUE {ordinal(bill.dueDay)}</div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#d0d0cf', ...S.sans }}>RM {bill.amount.toFixed(2)}</div>
+                          <div style={{ fontSize: 9, color: statusColor, ...S.mono, letterSpacing: '0.06em' }}>{statusLabel}</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
           {/* Debt Snapshot */}
           {snapshot && <DebtSnapshot snapshot={snapshot} targetCcPayment={targetCcPayment} setTargetCcPayment={setTargetCcPayment} />}
 

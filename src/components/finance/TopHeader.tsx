@@ -16,6 +16,7 @@ interface TopHeaderProps {
   onPayday?: () => void
   onSearch?: () => void
   onAfford?: () => void
+  onScenario?: () => void
   hasPaidThisMonth?: boolean
 }
 
@@ -66,7 +67,7 @@ function EyeOffIcon() {
   )
 }
 
-export default function TopHeader({ remaining, month, cycleLabel, onAdd, onPayday, onSearch, onAfford, hasPaidThisMonth }: TopHeaderProps) {
+export default function TopHeader({ remaining, month, cycleLabel, onAdd, onPayday, onSearch, onAfford, onScenario, hasPaidThisMonth }: TopHeaderProps) {
   const router = useRouter()
   const monthLabel = cycleLabel ?? formatMonthLabel(month)
   const [hidden, togglePrivacy] = usePrivacyMode()
@@ -281,6 +282,25 @@ export default function TopHeader({ remaining, month, cycleLabel, onAdd, onPayda
             }}
           />
         </button>
+
+        {/* What if scenario planner */}
+        {onScenario && (
+          <button
+            onClick={onScenario}
+            title="Scenario planner — what if?"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'transparent',
+              color: '#7a7a78',
+              border: '1px solid #1f1f1f',
+              borderRadius: 9, padding: '0 12px', height: 36,
+              cursor: 'pointer', fontSize: 12, fontWeight: 500,
+              fontFamily: '"Geist", -apple-system, sans-serif',
+            }}
+          >
+            What if?
+          </button>
+        )}
 
         {/* Can I afford this? */}
         {onAfford && (

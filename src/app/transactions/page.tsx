@@ -74,6 +74,11 @@ function TransactionsContent() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [editingCatTxId, setEditingCatTxId] = useState<string | null>(null)
 
+  // Bulk selection state
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkCatId, setBulkCatId] = useState<string>('')
+  const [bulkAssigning, setBulkAssigning] = useState(false)
+
   const load = useCallback(async () => {
     setLoading(true)
     const [txRes, catRes, settingsRes] = await Promise.all([
@@ -85,6 +90,7 @@ function TransactionsContent() {
     setCats(await catRes.json())
     if (settingsRes.ok) setSettings(await settingsRes.json())
     setLoading(false)
+    setSelected(new Set())
   }, [month])
 
   useEffect(() => { load() }, [load])
@@ -93,7 +99,7 @@ function TransactionsContent() {
 
   const filtered = useMemo(() => txs.filter(tx => {
     if (tab !== 'all' && tx.type !== tab) return false
-    if (accountFilter && (tx as Transaction & { accountId?: string | null }).accountId !== accountFilter) return false
+    if (accountFilter && tx.accountId !== accountFilter) return false
     if (search) {
       const q = search.toLowerCase()
       const name = (tx.merchant ?? tx.note ?? '').toLowerCase()
@@ -113,6 +119,42 @@ function TransactionsContent() {
     setDeleting(null)
   }
 
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === filtered.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(filtered.map(t => t.id)))
+    }
+  }
+
+  async function bulkAssign() {
+    if (selected.size === 0) return
+    setBulkAssigning(true)
+    await fetch('/api/transactions/bulk', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selected), categoryId: bulkCatId || null }),
+    })
+    setBulkAssigning(false)
+    setBulkCatId('')
+    load()
+  }
+
+  function downloadCsv() {
+    window.location.href = `/api/transactions/export?m=${month}`
+  }
+
+  const allSelected = filtered.length > 0 && selected.size === filtered.length
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
@@ -129,26 +171,39 @@ function TransactionsContent() {
           return `${fmt(start)} – ${fmt(end)}`
         })() : fmtMonth(month)
         return (
-      <div style={{ height: 72, background: '#0d0d0d', borderBottom: '1px solid #141414', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={S.label}>TRANSACTIONS / {fmtMonth(month)}</span>
-          <span style={{ fontSize: 18, fontWeight: 600, ...S.sans, color: '#f5f5f4' }}>History</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #1f1f1f', borderRadius: 10, padding: '3px 4px' }}>
-            <button onClick={() => router.push(`/transactions?m=${prevMonth(month)}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#7a7a78', display: 'flex', alignItems: 'center', padding: '3px 5px', borderRadius: 7 }}>
-              <Icon name="chevL" width={14} height={14} />
-            </button>
-            <span style={{ fontSize: 11, ...S.mono, color: '#d0d0cf', letterSpacing: '0.06em', padding: '0 4px' }}>{cycleLabel}</span>
-            <button onClick={() => router.push(`/transactions?m=${nextMonth(month)}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#7a7a78', display: 'flex', alignItems: 'center', padding: '3px 5px', borderRadius: 7 }}>
-              <Icon name="chevR" width={14} height={14} />
-            </button>
+          <div style={{ height: 72, background: '#0d0d0d', borderBottom: '1px solid #141414', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={S.label}>TRANSACTIONS / {fmtMonth(month)}</span>
+              <span style={{ fontSize: 18, fontWeight: 600, ...S.sans, color: '#f5f5f4' }}>History</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #1f1f1f', borderRadius: 10, padding: '3px 4px' }}>
+                <button onClick={() => router.push(`/transactions?m=${prevMonth(month)}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#7a7a78', display: 'flex', alignItems: 'center', padding: '3px 5px', borderRadius: 7 }}>
+                  <Icon name="chevL" width={14} height={14} />
+                </button>
+                <span style={{ fontSize: 11, ...S.mono, color: '#d0d0cf', letterSpacing: '0.06em', padding: '0 4px' }}>{cycleLabel}</span>
+                <button onClick={() => router.push(`/transactions?m=${nextMonth(month)}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#7a7a78', display: 'flex', alignItems: 'center', padding: '3px 5px', borderRadius: 7 }}>
+                  <Icon name="chevR" width={14} height={14} />
+                </button>
+              </div>
+              {/* CSV Export */}
+              <button
+                onClick={downloadCsv}
+                title="Export CSV"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid #1f1f1f', borderRadius: 9, padding: '0 12px', height: 36, cursor: 'pointer', color: '#7a7a78', fontSize: 12, ...S.mono }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                CSV
+              </button>
+              <button onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '0 14px', height: 36, cursor: 'pointer', fontSize: 13.5, fontWeight: 600, ...S.sans }}>
+                + Add
+              </button>
+            </div>
           </div>
-          <button onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 9, padding: '0 14px', height: 36, cursor: 'pointer', fontSize: 13.5, fontWeight: 600, ...S.sans }}>
-            + Add
-          </button>
-        </div>
-      </div>
         )
       })()}
 
@@ -202,6 +257,35 @@ function TransactionsContent() {
           </div>
         )}
 
+        {/* Bulk action bar */}
+        {selected.size > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(163,230,53,0.06)', border: '1px solid rgba(163,230,53,0.2)', borderRadius: 10, padding: '10px 16px' }}>
+            <span style={{ fontSize: 12, color: '#a3e635', ...S.mono, letterSpacing: '0.06em', flexShrink: 0 }}>{selected.size} SELECTED</span>
+            <select
+              value={bulkCatId}
+              onChange={e => setBulkCatId(e.target.value)}
+              style={{ flex: 1, maxWidth: 220, background: '#0d0d0d', border: '1px solid #2a2a2a', borderRadius: 7, padding: '6px 10px', fontSize: 12, color: '#f5f5f4', ...S.sans, outline: 'none', colorScheme: 'dark' }}
+            >
+              <option value="">Assign category…</option>
+              <option value="">Remove category</option>
+              {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <button
+              onClick={bulkAssign}
+              disabled={bulkAssigning}
+              style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 12, fontWeight: 700, ...S.sans, cursor: bulkAssigning ? 'not-allowed' : 'pointer' }}
+            >
+              {bulkAssigning ? 'Saving…' : 'Apply'}
+            </button>
+            <button
+              onClick={() => setSelected(new Set())}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#5b5b59', fontSize: 12, ...S.sans }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         {/* List */}
         {!loading && txs.length === 0 ? (
           <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 16, padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -238,7 +322,14 @@ function TransactionsContent() {
         ) : (
           <>
             <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '10px 20px', borderBottom: '1px solid #1a1a1a' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '32px 100px 1fr 140px 120px 36px 36px', gap: 12, padding: '10px 20px', borderBottom: '1px solid #1a1a1a', alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  style={{ accentColor: '#a3e635', width: 14, height: 14, cursor: 'pointer' }}
+                  title="Select all"
+                />
                 {['DATE', 'MERCHANT', 'CATEGORY', 'AMOUNT', '', ''].map((h, i) => (
                   <span key={i} style={S.label}>{h}</span>
                 ))}
@@ -254,8 +345,18 @@ function TransactionsContent() {
                   const effectiveMerchant = tx.merchant && tx.merchant !== 'Unknown' ? tx.merchant : null
                   const label = effectiveMerchant ?? tx.note ?? '—'
                   const expCats = cats.filter(c => c.type === tx.type || c.type === 'both')
+                  const isSelected = selected.has(tx.id)
                   return (
-                    <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 140px 120px 36px 36px', gap: 12, padding: '13px 20px', borderBottom: i < filtered.length - 1 ? '1px solid #141414' : 'none', alignItems: 'center' }}>
+                    <div
+                      key={tx.id}
+                      style={{ display: 'grid', gridTemplateColumns: '32px 100px 1fr 140px 120px 36px 36px', gap: 12, padding: '13px 20px', borderBottom: i < filtered.length - 1 ? '1px solid #141414' : 'none', alignItems: 'center', background: isSelected ? 'rgba(163,230,53,0.04)' : 'transparent' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(tx.id)}
+                        style={{ accentColor: '#a3e635', width: 14, height: 14, cursor: 'pointer' }}
+                      />
                       <span style={{ fontSize: 11, color: '#7a7a78', ...S.mono }}>{fmtDate(tx.date)}</span>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                         <span style={{ fontSize: 13, color: '#f5f5f4', ...S.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>

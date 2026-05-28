@@ -1,1 +1,12 @@
-{"framework": "nextjs", "buildCommand": "npm run build", "outputDirectory": ".next", "regions": ["sin1"]}
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "regions": ["sin1"],
+  "crons": [
+    {
+      "path": "/api/cron/cycle-summary",
+      "schedule": "0 10 * * *"
+    }
+  ]
+}

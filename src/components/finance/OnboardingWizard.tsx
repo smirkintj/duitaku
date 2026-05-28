@@ -39,16 +39,22 @@ const ACCOUNT_TYPES = [
   { value: 'credit', label: 'Credit card', desc: 'Track spending and statements' },
 ]
 
-// Total steps shown in progress bar (Welcome + Account + Salary + Bill + Done)
-const TOTAL_STEPS = 5
+// Preset categories for quick budget setup
+const BUDGET_PRESETS = [
+  { name: 'Groceries', icon: 'bag', color: '#a3e635', defaultBudget: 500 },
+  { name: 'Food & Drinks', icon: 'bowl', color: '#fbbf24', defaultBudget: 400 },
+  { name: 'Transport', icon: 'car', color: '#60a5fa', defaultBudget: 200 },
+  { name: 'Entertainment', icon: 'play', color: '#a78bfa', defaultBudget: 150 },
+]
+
+// Total steps shown in progress bar (Welcome + Account + Salary + Bill + Budget + Done)
+const TOTAL_STEPS = 6
 
 export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Props) {
   const [visible, setVisible] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [fade, setFade] = useState(true)
 
-  // If user already has accounts (step 3), start at the "add transactions" prompt (step 4)
-  // Otherwise start at welcome (step 1)
   const startStep = onboardingStep === 3 ? 4 : 1
   const [step, setStep] = useState(startStep)
 
@@ -69,6 +75,13 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
   const [billAmount, setBillAmount] = useState('')
   const [savingBill, setSavingBill] = useState(false)
 
+  // Budget step state — map preset name → monthly limit string
+  const [budgets, setBudgets] = useState<Record<string, string>>(
+    Object.fromEntries(BUDGET_PRESETS.map(p => [p.name, String(p.defaultBudget)]))
+  )
+  const [selectedBudgets, setSelectedBudgets] = useState<Set<string>>(new Set(BUDGET_PRESETS.map(p => p.name)))
+  const [savingBudgets, setSavingBudgets] = useState(false)
+
   useEffect(() => {
     setMounted(true)
     const shouldShow = (onboardingStep === 2 || onboardingStep === 3 || isNewUser)
@@ -78,7 +91,6 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
     }
   }, [isNewUser, onboardingStep])
 
-  // Keep startStep in sync if onboardingStep arrives late
   useEffect(() => {
     if (onboardingStep === 3) setStep(4)
   }, [onboardingStep])
@@ -147,8 +159,25 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
     goToStep(5)
   }
 
+  async function handleSaveBudgets() {
+    if (selectedBudgets.size === 0) { goToStep(6); return }
+    setSavingBudgets(true)
+    try {
+      const toCreate = BUDGET_PRESETS.filter(p => selectedBudgets.has(p.name))
+      await Promise.all(toCreate.map(p => {
+        const limit = parseFloat(budgets[p.name])
+        return fetch('/api/categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: p.name, icon: p.icon, color: p.color, type: 'expense', monthlyLimit: isNaN(limit) ? null : limit }),
+        })
+      }))
+    } catch { /* continue */ }
+    setSavingBudgets(false)
+    goToStep(6)
+  }
+
   function ProgressDots() {
-    // Only show dots for the full flow (not when joining mid-flow)
     if (startStep === 4) return null
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 28 }}>
@@ -196,7 +225,7 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
             </div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: '#f5f5f4', ...S.sans, margin: '0 0 10px', letterSpacing: '-0.02em' }}>Welcome to duitaku.</h1>
             <p style={{ fontSize: 14, color: '#7a7a78', ...S.sans, margin: '0 0 28px', lineHeight: 1.6 }}>
-              Let's get you set up in 3 quick steps — takes about 2 minutes.
+              Let's get you set up in 4 quick steps — takes about 2 minutes.
             </p>
             <button style={primaryBtn} onClick={() => goToStep(2)}>Let's go →</button>
             <button style={skipBtn} onClick={dismiss}>Skip setup</button>
@@ -206,7 +235,7 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
         {/* Step 2 — Add account */}
         {step === 2 && (
           <div>
-            <Header label="STEP 1 OF 3 — ACCOUNT" />
+            <Header label="STEP 1 OF 4 — ACCOUNT" />
             <h2 style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', ...S.sans, margin: '0 0 8px', letterSpacing: '-0.02em' }}>Add your first account</h2>
             <p style={{ fontSize: 13, color: '#7a7a78', ...S.sans, margin: '0 0 22px', lineHeight: 1.6 }}>
               Where do you keep your money? This links transactions to a real account.
@@ -299,14 +328,70 @@ export default function OnboardingWizard({ isNewUser, onboardingStep = 0 }: Prop
           </div>
         )}
 
-        {/* Step 5 — Done */}
+        {/* Step 5 — Category Budgets */}
         {step === 5 && (
           <div>
-            <Header label="STEP 4 OF 4 — DONE" />
+            <Header label="STEP 4 OF 4 — SPENDING LIMITS" />
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f4', ...S.sans, margin: '0 0 8px', letterSpacing: '-0.02em' }}>Set monthly spending limits</h2>
+            <p style={{ fontSize: 13, color: '#7a7a78', ...S.sans, margin: '0 0 20px', lineHeight: 1.6 }}>
+              Pick the categories you want to track and set a monthly budget. You&apos;ll see a progress bar on your dashboard when you&apos;re close to the limit.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              {BUDGET_PRESETS.map(p => {
+                const isOn = selectedBudgets.has(p.name)
+                return (
+                  <div
+                    key={p.name}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: isOn ? 'rgba(163,230,53,0.04)' : 'transparent', border: `1px solid ${isOn ? 'rgba(163,230,53,0.2)' : '#2a2a2a'}`, borderRadius: 10 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isOn}
+                      onChange={() => {
+                        const next = new Set(selectedBudgets)
+                        if (next.has(p.name)) next.delete(p.name)
+                        else next.add(p.name)
+                        setSelectedBudgets(next)
+                      }}
+                      style={{ accentColor: '#a3e635', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: isOn ? '#f5f5f4' : '#5b5b59', ...S.sans }}>{p.name}</div>
+                    </div>
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#5b5b59', ...S.mono, pointerEvents: 'none' }}>RM</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={budgets[p.name]}
+                        onChange={e => setBudgets(prev => ({ ...prev, [p.name]: e.target.value }))}
+                        disabled={!isOn}
+                        style={{ width: 90, background: '#0d0d0d', border: '1px solid #2a2a2a', borderRadius: 7, padding: '6px 8px 6px 28px', fontSize: 13, color: isOn ? '#f5f5f4' : '#3a3a3a', ...S.mono, outline: 'none', colorScheme: 'dark', opacity: isOn ? 1 : 0.4 }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <button
+              style={{ ...primaryBtn, background: savingBudgets ? '#1a1a1a' : '#a3e635', color: savingBudgets ? '#3a3a3a' : '#0d0d0d', cursor: savingBudgets ? 'not-allowed' : 'pointer' }}
+              onClick={handleSaveBudgets}
+              disabled={savingBudgets}
+            >
+              {savingBudgets ? 'Saving…' : selectedBudgets.size > 0 ? `Save ${selectedBudgets.size} budget${selectedBudgets.size > 1 ? 's' : ''} →` : 'Skip →'}
+            </button>
+            <button style={skipBtn} onClick={() => goToStep(6)}>Skip for now</button>
+          </div>
+        )}
+
+        {/* Step 6 — Done */}
+        {step === 6 && (
+          <div>
+            <Header label="DONE" />
             <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(163,230,53,0.1)', border: '1px solid rgba(163,230,53,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a3e635" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
             </div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: '#f5f5f4', ...S.sans, margin: '0 0 10px', letterSpacing: '-0.02em' }}>You're all set.</h2>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: '#f5f5f4', ...S.sans, margin: '0 0 10px', letterSpacing: '-0.02em' }}>You&apos;re all set.</h2>
             <p style={{ fontSize: 14, color: '#7a7a78', ...S.sans, margin: '0 0 24px', lineHeight: 1.6 }}>
               Log your first expense now to start tracking, import a bank statement, or go straight to the dashboard.
             </p>

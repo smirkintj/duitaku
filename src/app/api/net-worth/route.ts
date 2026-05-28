@@ -3,6 +3,9 @@ import { financeAccounts, financeInvestments, financeSavingsGoals, financeLoans,
 import { and, eq } from 'drizzle-orm'
 import { getUserIdFromRequest, unauthorized } from '@/lib/get-user-id'
 
+// Investment types considered illiquid (long-term, hard to access quickly)
+const ILLIQUID_TYPES = new Set(['epf', 'asb', 'unit_trust', 'property'])
+
 export async function GET(request: Request) {
   const userId = await getUserIdFromRequest(request)
   if (!userId) return unauthorized()
@@ -15,32 +18,34 @@ export async function GET(request: Request) {
     db.select().from(financeBnpl).where(and(eq(financeBnpl.userId, userId), eq(financeBnpl.isActive, true))),
   ])
 
-  // ASSETS
-  // Bank/cash accounts: use initialBalance (no live transaction sum for now)
+  // ASSETS — liquid
   const bankCashAccounts = accounts.filter(a => a.type === 'bank' || a.type === 'cash')
   const accountsTotal = bankCashAccounts.reduce((a, acc) => a + acc.initialBalance, 0)
-
-  const investmentsTotal = investments.reduce((a, inv) => a + inv.currentValue, 0)
   const savingsTotal = savings.reduce((a, s) => a + s.currentAmount, 0)
 
-  const assetsTotal = accountsTotal + investmentsTotal + savingsTotal
+  // ASSETS — split investments into liquid / illiquid
+  const liquidInvestments = investments.filter(i => !ILLIQUID_TYPES.has(i.type))
+  const illiquidInvestments = investments.filter(i => ILLIQUID_TYPES.has(i.type))
+
+  const liquidInvestmentsTotal = liquidInvestments.reduce((a, i) => a + i.currentValue, 0)
+  const illiquidInvestmentsTotal = illiquidInvestments.reduce((a, i) => a + i.currentValue, 0)
+
+  const investmentsTotal = liquidInvestmentsTotal + illiquidInvestmentsTotal
+
+  const liquidTotal = accountsTotal + savingsTotal + liquidInvestmentsTotal
+  const illiquidTotal = illiquidInvestmentsTotal
+  const assetsTotal = liquidTotal + illiquidTotal
 
   // LIABILITIES
-  // Credit card outstanding
   const ccAccounts = accounts.filter(a => a.type === 'credit')
   const ccTotal = ccAccounts.reduce((a, acc) => a + (acc.currentOutstanding ?? 0), 0)
-
-  // Loans outstanding balance
   const loansTotal = loans.reduce((a, l) => a + l.outstandingBalance, 0)
-
-  // BNPL: remaining installments × installmentAmount
   const bnplTotal = bnplPlans.reduce((a, p) => {
     const remaining = p.totalInstallments - p.paidInstallments
     return a + remaining * p.installmentAmount
   }, 0)
 
   const liabilitiesTotal = ccTotal + loansTotal + bnplTotal
-
   const netWorth = assetsTotal - liabilitiesTotal
 
   return Response.json({
@@ -48,6 +53,8 @@ export async function GET(request: Request) {
       accounts: accountsTotal,
       investments: investmentsTotal,
       savings: savingsTotal,
+      liquid: liquidTotal,
+      illiquid: illiquidTotal,
       total: assetsTotal,
     },
     liabilities: {
