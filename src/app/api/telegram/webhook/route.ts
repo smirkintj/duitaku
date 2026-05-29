@@ -14,11 +14,17 @@ import {
   financeLoans,
   financeInvestments,
   financeAccounts,
+  financeSavingsGoals,
+  financeBnpl,
+  financeSalary,
+  financeCategories,
+  userSettings,
 } from '@/db/schema'
 import { and, eq, gte, lte, desc, sql, isNotNull } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
 import { validateAmount } from '@/lib/validate'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { computeRedFlags } from '@/lib/red-flags'
 
 function toTitleCase(s: string): string {
   return s.replace(/\b\w/g, c => c.toUpperCase()).replace(/\B\w/g, c => c.toLowerCase())
@@ -33,24 +39,33 @@ function normalizeAccountName(s: string): string {
 }
 import { fetchAssetInsight, investmentTypesToAssets, resolveAsset, signalEmoji } from '@/lib/market-data'
 
+interface TelegramPhotoSize { file_id: string; width: number; height: number; file_size?: number }
 interface TelegramChat { id: number }
-interface TelegramMessage { text?: string; chat?: TelegramChat }
+interface TelegramMessage { text?: string; chat?: TelegramChat; photo?: TelegramPhotoSize[] }
 interface TelegramUpdate { message?: TelegramMessage }
 
 interface ParsedIntent {
   intent: 'mark_bill_paid' | 'add_expense' | 'add_income' | 'check_balance' |
           'check_loans' | 'check_investments' | 'check_net_worth' |
           'payment_history' | 'recent_transactions' | 'market_insights' | 'topup' |
-          'pay_loan' | 'unknown'
+          'pay_loan' | 'pay_bnpl' | 'check_accounts' | 'check_savings' | 'check_upcoming' |
+          'check_bnpl' | 'check_salary' | 'check_category_budget' | 'check_red_flags' |
+          'check_trends' | 'add_savings' | 'undo_last' | 'set_category_budget' | 'unknown'
   billId?: string
   billName?: string
   loanId?: string
   loanName?: string
+  bnplId?: string
+  bnplName?: string
+  categoryName?: string
+  goalName?: string
+  savingsAmount?: number
+  budgetAmount?: number
   amount?: number
   merchant?: string
   note?: string | null
-  query?: string  // for payment_history: what to look up
-  account_name?: string  // for topup intent
+  query?: string
+  account_name?: string
   _?: string
 }
 
@@ -101,50 +116,84 @@ SPENDING
 • "spent RM45 at lunch" — log an expense
 • "received RM500" — log income
 • "topup RM100 to TnG" — top up an account
+• Send a receipt photo — auto-log via OCR
+
+BILLS & LOANS
 • "paid celcomdigi" — mark a bill as paid
 • "paid proton x50" — log a loan installment
+• "paid shopee bnpl" — pay a BNPL installment
+• "upcoming bills" — next 30 days of payments
 
-BALANCE & OVERVIEW
+ACCOUNTS & SAVINGS
+• "my accounts" — account balances
+• "my savings" — savings goals progress
+• "saved RM200 for car" — add to a goal
+• "set food budget RM500" — set category limit
+
+OVERVIEW
 • "how much left" — this month's budget
+• "my salary" — gross, net & deductions
+• "spending trend" — compare to last month
 • "net worth" — assets vs liabilities
-• "my investments" — portfolio summary
-• "how much loan" — loan balances
+• "red flags" — budget warnings
 
-HISTORY
+HISTORY & MARKET
 • "last 5 transactions" — recent spending
-• "when did i pay celcomdigi" — payment history
+• "undo" — delete the last transaction
+• "gold" / "KLCI" / "BTC" — live market price
 
-MARKET
-• "gold" / "KLSE" / "BTC" — live price + signal
-
-Send /help anytime to see this list again.`)
+Send /help anytime to see the full command list.`)
 }
 
 const HELP_TEXT = `What I can do:
 
 SPENDING
 • "spent RM45 at lunch" — log expense
+• "9.70 breakfast using RYT" — quick expense
 • "received RM500 bonus" — log income
 • "topup RM100 to TnG" — top up account
+• Send a receipt photo — auto-log via OCR
+
+BILLS & LOANS
 • "paid celcomdigi" — mark bill as paid
 • "paid proton x50" — log loan installment
+• "paid shopee bnpl" — pay BNPL installment
+• "upcoming bills" — next 30 days due
 
-BALANCE
-• "how much left" — monthly budget
+ACCOUNTS & SAVINGS
+• "my accounts" — balances & CC utilisation
+• "my savings" — goals progress
+• "saved RM200 for emergency" — add to goal
+• "set food budget RM500" — update category limit
+
+OVERVIEW
+• "how much left" — this month's budget
+• "my salary" / "gaji" — gross, net & deductions
+• "how much loan" / "hutang" — loan balances
+• "my bnpl" — installment plans
 • "net worth" — assets vs liabilities
 • "my investments" — portfolio
-• "how much loan" — loan balances
+• "spending trend" / "bulan lepas" — monthly comparison
+• "food budget" — category budget check
+• "red flags" / "masalah" — budget alerts
 
 HISTORY
 • "last 5 transactions" — recent spending
 • "when did i pay unifi" — payment history
+• "undo" / "silap" — delete last transaction
 
 MARKET
-• "gold" / "KLSE" / "BTC" — live price + signal
+• "gold" / "KLCI" / "BTC" — live price + signal
 
-Just type naturally — I'll understand most phrasings.`
+Just type naturally in English or Malay — I'll understand most phrasings.`
 
 function fmt(n: number) { return n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+
+function progBar(current: number, max: number, width = 10): string {
+  if (max <= 0) return '░'.repeat(width)
+  const filled = Math.min(width, Math.round((current / max) * width))
+  return '█'.repeat(filled) + '░'.repeat(width - filled)
+}
 
 async function handleMessage(userId: string, chatId: string, text: string): Promise<void> {
   const now = new Date()
@@ -201,9 +250,39 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
     }
   }
 
-  const [bills, activeLoans] = await Promise.all([
+  if (pending?.intent === 'ocr_confirm') {
+    const lower2 = text.toLowerCase().trim()
+    const pendingOcr = JSON.parse(pending.data) as { amount: number; merchant: string | null; date: string | null; note: string | null }
+    if (['yes', 'ya', 'ok', 'yep', 'confirm', 'log it', 'log', 'yeah'].some(k => lower2 === k || lower2.startsWith(k))) {
+      await db.delete(telegramPending).where(eq(telegramPending.userId, userId))
+      const txDate = (pendingOcr.date && /^\d{4}-\d{2}-\d{2}$/.test(pendingOcr.date)) ? pendingOcr.date : today
+      let categoryId: string | null = null
+      if (pendingOcr.merchant) {
+        const [catRow] = await db.select({ categoryId: financeTransactions.categoryId })
+          .from(financeTransactions)
+          .where(and(eq(financeTransactions.userId, userId), isNotNull(financeTransactions.categoryId), sql`lower(${financeTransactions.merchant}) = ${pendingOcr.merchant.toLowerCase()}`))
+          .groupBy(financeTransactions.categoryId).orderBy(desc(sql`count(*)`)).limit(1)
+        categoryId = catRow?.categoryId ?? null
+      }
+      await db.insert(financeTransactions).values({
+        userId, amount: pendingOcr.amount, currency: 'MYR', date: txDate,
+        merchant: pendingOcr.merchant, note: pendingOcr.note, type: 'expense', categoryId,
+      })
+      await sendMessage(chatId, `✅ Logged RM${fmt(pendingOcr.amount)} expense${pendingOcr.merchant ? ` at ${pendingOcr.merchant}` : ''}.`)
+      return
+    } else if (['no', 'nope', 'cancel', 'tak', 'tidak'].some(k => lower2 === k || lower2.startsWith(k))) {
+      await db.delete(telegramPending).where(eq(telegramPending.userId, userId))
+      await sendMessage(chatId, 'Cancelled.')
+      return
+    }
+    // Any other reply: clear pending and process as normal message
+    await db.delete(telegramPending).where(eq(telegramPending.userId, userId))
+  }
+
+  const [bills, activeLoans, activeBnpl] = await Promise.all([
     db.select().from(financeBills).where(and(eq(financeBills.userId, userId), eq(financeBills.isActive, true))),
     db.select().from(financeLoans).where(and(eq(financeLoans.userId, userId), eq(financeLoans.isActive, true))),
+    db.select().from(financeBnpl).where(and(eq(financeBnpl.userId, userId), eq(financeBnpl.isActive, true))),
   ])
 
   const monthTxns = await db.select().from(financeTransactions)
@@ -221,12 +300,36 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
     return
   }
 
-  if (['how much left', 'baki', 'check balance', 'how much do i have', 'remaining this month'].some(k => lower.includes(k))) {
+  if (['how much left', 'baki', 'check balance', 'how much do i have', 'remaining this month', 'berapa tinggal', 'berapa ada'].some(k => lower.includes(k))) {
     parsed = { intent: 'check_balance' }
   } else if (['balance'].some(k => lower === k || lower.startsWith(k + ' '))) {
     parsed = { intent: 'check_balance' }
+  } else if (['undo', 'delete last', 'silap', 'cancel that', 'wrong entry', 'padam last'].some(k => lower.includes(k))) {
+    parsed = { intent: 'undo_last' }
   } else if (['how much loan', 'my loan', 'my debt', 'hutang', 'loan balance', 'berapa hutang', 'outstanding loan'].some(k => lower.includes(k))) {
     parsed = { intent: 'check_loans' }
+  } else if (['my account', 'akaun saya', 'account balance', 'bank balance', 'show account', 'all account', 'semua akaun'].some(k => lower.includes(k))) {
+    parsed = { intent: 'check_accounts' }
+  } else if (['my saving', 'savings goal', 'simpanan', 'how much saved', 'berapa simpan'].some(k => lower.includes(k)) || (lower === 'tabung' || lower.startsWith('tabung ') && !lower.match(/rm\s*\d/i))) {
+    parsed = { intent: 'check_savings' }
+  } else if (['upcoming bill', "what's due", 'whats due', 'apa due', 'bills this week', 'due this month', 'next payment', 'next bill', 'apa bayaran'].some(k => lower.includes(k))) {
+    parsed = { intent: 'check_upcoming' }
+  } else if (['my bnpl', ' bnpl', 'installment plan', 'atome', 'splitit', 'grab pay later', 'shopee pay later', 'fave pay'].some(k => lower.includes(k)) || lower === 'bnpl') {
+    parsed = { intent: 'check_bnpl' }
+  } else if (['my salary', 'gaji saya', 'berapa gaji', 'payslip', 'epf deduction', 'net salary', 'take home pay', 'pcb', 'potongan'].some(k => lower.includes(k)) || lower === 'gaji' || lower.startsWith('gaji ')) {
+    parsed = { intent: 'check_salary' }
+  } else if (['red flag', 'any issue', 'masalah', 'amaran', 'budget warning', 'over budget', 'any warning', 'habis budget'].some(k => lower.includes(k))) {
+    parsed = { intent: 'check_red_flags' }
+  } else if (['spending trend', 'monthly trend', 'last month', 'bulan lepas', 'monthly summary', 'compare month', 'trend spending'].some(k => lower.includes(k))) {
+    parsed = { intent: 'check_trends' }
+  } else if (/\b(set|limit|cap|tetapkan)\b.+\bbudget\b/i.test(lower) || /\blimit\b.+\bto\b.+rm/i.test(lower)) {
+    const amtMatch = text.match(/rm\s*(\d+(?:[.,]\d+)?)/i) ?? text.match(/\b(\d+(?:[.,]\d+)?)\b/)
+    if (amtMatch) {
+      const budgetAmount = parseFloat(amtMatch[1].replace(',', '.'))
+      const catMatch = text.match(/set\s+(\w+)\s+budget/i) ?? text.match(/limit\s+(\w+)\s+to/i) ?? text.match(/cap\s+(\w+)\b/i)
+      const categoryName = catMatch ? catMatch[1].trim() : undefined
+      parsed = { intent: 'set_category_budget', categoryName, budgetAmount }
+    }
   } else if (['price', 'signal', 'market', 'pasaran', 'harga'].some(k => lower.includes(k)) || resolveAsset(lower) !== null) {
     parsed = { intent: 'market_insights', query: lower }
   } else if (['my investment', 'investment', 'portfolio', 'epf', 'amanah saham', 'asb', 'unit trust', 'berapa invest'].some(k => lower.includes(k))) {
@@ -238,6 +341,14 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
     parsed = { intent: 'payment_history', query }
   } else if (['last transactions', 'recent transactions', 'last spending', 'what did i spend', 'recent expenses', 'tunjuk transaction'].some(k => lower.includes(k))) {
     parsed = { intent: 'recent_transactions' }
+  } else if (['saved rm', 'simpan rm', 'add to savings', 'tabung rm'].some(k => lower.includes(k)) || (/\bsaved\b.+\bfor\b/i.test(lower) && lower.includes('rm'))) {
+    const amtMatch = text.match(/rm\s*(\d+(?:[.,]\d+)?)/i) ?? text.match(/\b(\d+(?:[.,]\d+)?)\b/)
+    if (amtMatch) {
+      const savingsAmount = parseFloat(amtMatch[1].replace(',', '.'))
+      const forMatch = text.match(/\bfor\s+(.+)/i) ?? text.match(/\buntuk\s+(.+)/i)
+      const goalName = forMatch ? forMatch[1].replace(/rm\s*\d+(?:[.,]\d+)?/i, '').replace(/\bbayar\b|\bsaved?\b/gi, '').trim() : undefined
+      parsed = { intent: 'add_savings', savingsAmount, goalName }
+    }
   } else if (['paid ', 'bayar ', 'dah bayar'].some(k => lower.startsWith(k) || lower.includes(k))) {
     const matchedBill = bills.find(b => lower.includes(b.name.toLowerCase()))
     if (matchedBill) {
@@ -247,7 +358,22 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
         lower.includes(l.name.toLowerCase()) ||
         l.name.toLowerCase().split(' ').some(w => w.length > 3 && lower.includes(w))
       )
-      if (matchedLoan) parsed = { intent: 'pay_loan', loanId: matchedLoan.id, loanName: matchedLoan.name }
+      if (matchedLoan) {
+        parsed = { intent: 'pay_loan', loanId: matchedLoan.id, loanName: matchedLoan.name }
+      } else {
+        const matchedBnpl = activeBnpl.find(b =>
+          lower.includes(b.merchant.toLowerCase()) ||
+          b.merchant.toLowerCase().split(' ').some(w => w.length > 3 && lower.includes(w))
+        )
+        if (matchedBnpl) parsed = { intent: 'pay_bnpl', bnplId: matchedBnpl.id, bnplName: matchedBnpl.merchant }
+      }
+    }
+  } else if (lower.includes('budget') && !lower.includes('set ') && !lower.includes('limit ')) {
+    const catMatch = text.match(/(\w+)\s+budget/i) ?? text.match(/budget\s+(?:for\s+)?(\w+)/i)
+    const categoryName = catMatch ? catMatch[1].trim() : undefined
+    const skipWords = new Set(['my', 'the', 'a', 'check', 'monthly', 'total', 'remaining', 'what', 'is', 'how', 'any', 'food', 'transport'])
+    if (categoryName && !skipWords.has(categoryName.toLowerCase()) || categoryName) {
+      parsed = { intent: 'check_category_budget', categoryName }
     }
   } else if (['spent ', 'spend ', 'beli ', 'bought '].some(k => lower.includes(k))) {
     // Match "RM12.30" or bare "12.30"
@@ -308,29 +434,51 @@ Return ONLY valid JSON with no explanation.
 
 Available bills: ${JSON.stringify(bills.map(b => ({ id: b.id, name: b.name, amount: b.amount })))}
 Available loans: ${JSON.stringify(activeLoans.map(l => ({ id: l.id, name: l.name, monthlyInstallment: l.monthlyInstallment })))}
+Available BNPL: ${JSON.stringify(activeBnpl.map(b => ({ id: b.id, merchant: b.merchant, provider: b.provider, installmentAmount: b.installmentAmount })))}
 
-Examples of natural phrasings and their outputs:
+Examples:
 - "spent 45 at mamak" → {"intent":"add_expense","amount":45,"merchant":"mamak","note":null}
-- "9.70 for breakfast using ryt" → {"intent":"add_expense","amount":9.70,"merchant":"ryt","note":"breakfast"}
-- "45.1 lunch using ryt" → {"intent":"add_expense","amount":45.1,"merchant":"ryt","note":"lunch"}
+- "9.70 breakfast using ryt" → {"intent":"add_expense","amount":9.70,"merchant":"ryt","note":"breakfast"}
 - "beli kopi 4.50" → {"intent":"add_expense","amount":4.50,"merchant":null,"note":"kopi"}
 - "received bonus 500" → {"intent":"add_income","amount":500,"note":"bonus"}
 - "topup 60 touch n go" → {"intent":"topup","amount":60,"account_name":"touch n go"}
-- "paid my proton x50" → {"intent":"pay_loan","loanId":"uuid","loanName":"Proton X50"}
-- "bayar loan kereta" → {"intent":"pay_loan","loanId":"uuid","loanName":"loan name"}
+- "paid proton x50" → {"intent":"pay_loan","loanId":"uuid","loanName":"Proton X50"}
+- "paid shopee bnpl" → {"intent":"pay_bnpl","bnplId":"uuid","bnplName":"Shopee"}
+- "saved RM200 for emergency" → {"intent":"add_savings","savingsAmount":200,"goalName":"emergency"}
+- "set food budget RM500" → {"intent":"set_category_budget","categoryName":"food","budgetAmount":500}
+- "gaji saya" → {"intent":"check_salary","_":""}
+- "bulan lepas" → {"intent":"check_trends","_":""}
+- "red flags" → {"intent":"check_red_flags","_":""}
+- "my accounts" → {"intent":"check_accounts","_":""}
+- "my savings" → {"intent":"check_savings","_":""}
+- "upcoming bills" → {"intent":"check_upcoming","_":""}
+- "food budget" → {"intent":"check_category_budget","categoryName":"food"}
+- "undo" → {"intent":"undo_last","_":""}
 
 Return one of:
 {"intent":"mark_bill_paid","billId":"uuid","billName":"string"}
 {"intent":"pay_loan","loanId":"uuid","loanName":"string"}
+{"intent":"pay_bnpl","bnplId":"uuid","bnplName":"string"}
 {"intent":"add_expense","amount":number,"merchant":"string or null","note":"string or null"}
 {"intent":"add_income","amount":number,"note":"string"}
+{"intent":"add_savings","savingsAmount":number,"goalName":"string or null"}
 {"intent":"check_balance","_":""}
 {"intent":"check_loans","_":""}
+{"intent":"check_accounts","_":""}
+{"intent":"check_savings","_":""}
+{"intent":"check_upcoming","_":""}
+{"intent":"check_bnpl","_":""}
+{"intent":"check_salary","_":""}
+{"intent":"check_red_flags","_":""}
+{"intent":"check_trends","_":""}
 {"intent":"check_investments","_":""}
 {"intent":"check_net_worth","_":""}
+{"intent":"check_category_budget","categoryName":"string"}
 {"intent":"payment_history","query":"bill or merchant name to look up"}
 {"intent":"recent_transactions","_":""}
+{"intent":"set_category_budget","categoryName":"string","budgetAmount":number}
 {"intent":"topup","amount":number,"account_name":"account name to top up"}
+{"intent":"undo_last","_":""}
 {"intent":"unknown","_":""}`,
         messages: [{ role: 'user', content: text }],
       })
@@ -622,8 +770,350 @@ ${insight.signalReason}
       await sendMessage(chatId, `Added RM${fmt(amount)} to ${matched.name}.`)
     }
 
+  } else if (parsed.intent === 'pay_bnpl') {
+    let bnpl = activeBnpl.find(b => b.id === parsed.bnplId)
+    if (!bnpl && parsed.bnplName) {
+      const nl = parsed.bnplName.toLowerCase()
+      bnpl = activeBnpl.find(b => b.merchant.toLowerCase().includes(nl) || nl.includes(b.merchant.toLowerCase()))
+    }
+    if (!bnpl) bnpl = activeBnpl.find(b => lower.includes(b.merchant.toLowerCase()))
+
+    if (!bnpl) {
+      const list = activeBnpl.map(b => `• ${b.merchant} (${b.provider})`).join('\n')
+      await sendMessage(chatId, `Couldn't find that BNPL plan. Active plans:\n${list || '(none)'}`)
+      return
+    }
+
+    const newPaid = bnpl.paidInstallments + 1
+    const isNowComplete = newPaid >= bnpl.totalInstallments
+
+    await db.insert(financeTransactions).values({
+      userId, accountId: bnpl.accountId, amount: bnpl.installmentAmount, currency: 'MYR', date: today,
+      type: 'expense', merchant: bnpl.merchant, note: `BNPL installment — ${bnpl.provider}`, isRecurring: true,
+    })
+    await db.update(financeBnpl)
+      .set({ paidInstallments: newPaid, lastPaidAt: now, ...(isNowComplete && { isActive: false }) })
+      .where(eq(financeBnpl.id, bnpl.id))
+
+    const bnplMsg = isNowComplete
+      ? `BNPL fully paid off! ${bnpl.merchant} (${bnpl.provider}) complete. RM${fmt(bnpl.installmentAmount)} logged.`
+      : `BNPL installment paid — RM${fmt(bnpl.installmentAmount)} for ${bnpl.merchant}. ${newPaid}/${bnpl.totalInstallments} done, ${bnpl.totalInstallments - newPaid} remaining.`
+    await sendMessage(chatId, `✅ ${bnplMsg}`)
+
+  } else if (parsed.intent === 'check_accounts') {
+    const accounts = await db.select().from(financeAccounts).where(eq(financeAccounts.userId, userId))
+    if (accounts.length === 0) {
+      await sendMessage(chatId, 'No accounts found. Add one in duitaku → Accounts.')
+      return
+    }
+    const lines = accounts.map(a => {
+      if (a.type === 'credit') {
+        const outstanding = a.currentOutstanding ?? 0
+        const limit = a.creditLimit ?? 0
+        const pct = limit > 0 ? Math.round((outstanding / limit) * 100) : 0
+        return `<b>${a.name}</b> (credit)\n  [${progBar(outstanding, limit)}] ${pct}% — RM${fmt(outstanding)} / RM${fmt(limit)}`
+      }
+      return `<b>${a.name}</b> (${a.type}): RM${fmt(a.initialBalance)}`
+    }).join('\n\n')
+    await sendMessage(chatId, `<b>Accounts</b>\n\n${lines}`)
+
+  } else if (parsed.intent === 'check_savings') {
+    const goals = await db.select().from(financeSavingsGoals).where(eq(financeSavingsGoals.userId, userId))
+    if (goals.length === 0) {
+      await sendMessage(chatId, 'No savings goals set. Create one in duitaku → Savings.')
+      return
+    }
+    const lines = goals.map(g => {
+      if (g.targetAmount && g.targetAmount > 0) {
+        const pct = Math.round((g.currentAmount / g.targetAmount) * 100)
+        const remaining = Math.max(0, g.targetAmount - g.currentAmount)
+        return `<b>${g.name}</b>\n  [${progBar(g.currentAmount, g.targetAmount)}] ${pct}%\n  RM${fmt(g.currentAmount)} of RM${fmt(g.targetAmount)} — RM${fmt(remaining)} to go`
+      }
+      return `<b>${g.name}</b>: RM${fmt(g.currentAmount)} saved`
+    }).join('\n\n')
+    const total = goals.reduce((s, g) => s + g.currentAmount, 0)
+    await sendMessage(chatId, `<b>Savings Goals</b>\n\n${lines}\n\n<b>Total saved: RM${fmt(total)}</b>`)
+
+  } else if (parsed.intent === 'check_upcoming') {
+    const todayDay = now.getDate()
+    const items: { name: string; amount: number; dueDay: number; daysLeft: number; isPaid: boolean }[] = []
+
+    const billPayments = await db.select().from(financeBillPayments)
+      .where(and(
+        sql`${financeBillPayments.billId} in (select id from finance_bills where user_id = ${userId} and is_active = true)`,
+        eq(financeBillPayments.month, monthStr),
+        isNotNull(financeBillPayments.paidAt),
+      ))
+    const paidBillIds = new Set(billPayments.map(p => p.billId))
+
+    for (const bill of bills) {
+      const daysLeft = bill.dueDay >= todayDay
+        ? bill.dueDay - todayDay
+        : bill.dueDay - todayDay + 30
+      items.push({ name: bill.name, amount: bill.amount, dueDay: bill.dueDay, daysLeft, isPaid: paidBillIds.has(bill.id) })
+    }
+    for (const b of activeBnpl) {
+      const remaining = b.totalInstallments - b.paidInstallments
+      if (remaining > 0) {
+        items.push({ name: `${b.merchant} BNPL`, amount: b.installmentAmount, dueDay: 1, daysLeft: todayDay <= 1 ? 0 : 30 - todayDay + 1, isPaid: false })
+      }
+    }
+
+    items.sort((a, b) => a.daysLeft - b.daysLeft)
+
+    const overdue = items.filter(i => !i.isPaid && i.daysLeft === 0)
+    const soon = items.filter(i => !i.isPaid && i.daysLeft > 0 && i.daysLeft <= 7)
+    const later = items.filter(i => !i.isPaid && i.daysLeft > 7)
+    const paid = items.filter(i => i.isPaid)
+
+    const fmtItem = (i: typeof items[0]) => `• ${i.name}: RM${fmt(i.amount)} (day ${i.dueDay}${i.daysLeft > 0 ? `, ${i.daysLeft}d left` : ' — TODAY'})`
+    const parts: string[] = []
+    if (overdue.length > 0) parts.push(`🔴 <b>Due today</b>\n${overdue.map(fmtItem).join('\n')}`)
+    if (soon.length > 0) parts.push(`🟡 <b>Coming soon</b>\n${soon.map(fmtItem).join('\n')}`)
+    if (later.length > 0) parts.push(`<b>Later this month</b>\n${later.map(fmtItem).join('\n')}`)
+    if (paid.length > 0) parts.push(`✅ <b>Paid</b>\n${paid.map(i => `• ${i.name}: RM${fmt(i.amount)}`).join('\n')}`)
+    if (parts.length === 0) {
+      await sendMessage(chatId, 'No upcoming bills found.')
+      return
+    }
+    await sendMessage(chatId, `<b>Upcoming Payments</b>\n\n${parts.join('\n\n')}`)
+
+  } else if (parsed.intent === 'check_bnpl') {
+    if (activeBnpl.length === 0) {
+      await sendMessage(chatId, 'No active BNPL plans.')
+      return
+    }
+    const lines = activeBnpl.map(b => {
+      const remaining = b.totalInstallments - b.paidInstallments
+      const lastPaid = b.lastPaidAt ? ` · last paid ${new Date(b.lastPaidAt).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })}` : ''
+      return `<b>${b.merchant}</b> (${b.provider})\n  RM${fmt(b.installmentAmount)}/mo · ${b.paidInstallments}/${b.totalInstallments} paid · ${remaining} months left${lastPaid}`
+    }).join('\n\n')
+    const totalMonthly = activeBnpl.reduce((s, b) => s + b.installmentAmount, 0)
+    await sendMessage(chatId, `<b>BNPL Plans</b>\n\n${lines}\n\n<b>Total monthly: RM${fmt(totalMonthly)}</b>`)
+
+  } else if (parsed.intent === 'check_salary') {
+    const [salary] = await db.select().from(financeSalary)
+      .where(eq(financeSalary.userId, userId))
+      .orderBy(desc(financeSalary.effectiveFrom))
+      .limit(1)
+    if (!salary) {
+      await sendMessage(chatId, 'No salary record found. Add it in duitaku → Settings → Salary.')
+      return
+    }
+    const gross = salary.grossAmount ?? salary.amount
+    const deductions = [
+      salary.epfEmployee ? `  EPF (employee): RM${fmt(salary.epfEmployee)}` : null,
+      salary.epfEmployer ? `  EPF (employer): RM${fmt(salary.epfEmployer)}` : null,
+      salary.socso ? `  SOCSO: RM${fmt(salary.socso)}` : null,
+      salary.eis ? `  EIS: RM${fmt(salary.eis)}` : null,
+      salary.pcb ? `  PCB (tax): RM${fmt(salary.pcb)}` : null,
+      salary.otherDeductions ? `  Other: RM${fmt(salary.otherDeductions)}` : null,
+    ].filter(Boolean).join('\n')
+    await sendMessage(chatId, `<b>Salary (from ${salary.effectiveFrom})</b>
+
+Gross: RM${fmt(gross)}
+${deductions ? deductions + '\n' : ''}
+<b>Net take-home: RM${fmt(salary.amount)}</b>`)
+
+  } else if (parsed.intent === 'check_red_flags') {
+    const [allCats, thisMonthTxnsRf, salaryRecord] = await Promise.all([
+      db.select().from(financeCategories).where(eq(financeCategories.userId, userId)),
+      db.select().from(financeTransactions).where(and(eq(financeTransactions.userId, userId), gte(financeTransactions.date, monthStart), lte(financeTransactions.date, monthEnd))),
+      db.select().from(financeSalary).where(eq(financeSalary.userId, userId)).orderBy(desc(financeSalary.effectiveFrom)).limit(1),
+    ])
+    const salaryAmt = salaryRecord[0]?.amount ?? 0
+    const catStats = allCats.map(cat => ({
+      name: cat.name,
+      spent: thisMonthTxnsRf.filter(t => t.categoryId === cat.id && t.type === 'expense').reduce((s, t) => s + t.amount, 0),
+      prior3moAvg: 0,
+      monthlyLimit: cat.monthlyLimit ?? null,
+    }))
+    const rfIncome = thisMonthTxnsRf.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+    const rfSpent = thisMonthTxnsRf.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+    const flags = computeRedFlags(salaryAmt, rfIncome - rfSpent, catStats, thisMonthTxnsRf)
+    if (flags.length === 0) {
+      await sendMessage(chatId, '✅ No budget issues detected this month. You\'re on track!')
+      return
+    }
+    const lines = flags.slice(0, 3).map(f => {
+      const icon = f.tone === 'danger' ? '🔴' : '🟡'
+      return `${icon} <b>${f.title}</b> (${f.metric})\n${f.detail}\nTip: ${f.tip}`
+    }).join('\n\n')
+    await sendMessage(chatId, `<b>Budget Check</b>\n\n${lines}`)
+
+  } else if (parsed.intent === 'check_trends') {
+    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`
+    const [prevTxns, cats] = await Promise.all([
+      db.select().from(financeTransactions).where(and(eq(financeTransactions.userId, userId), sql`${financeTransactions.date} like ${prevMonthStr + '-%'}`)),
+      db.select().from(financeCategories).where(eq(financeCategories.userId, userId)),
+    ])
+    const thisIncome = monthTxns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+    const thisSpent = monthTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+    const prevIncome = prevTxns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+    const prevSpent = prevTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+    const spentΔ = thisSpent - prevSpent
+    const catMap = new Map(cats.map(c => [c.id, c.name]))
+    const catTotals = new Map<string, number>()
+    for (const t of monthTxns.filter(t2 => t2.type === 'expense' && t2.categoryId)) {
+      catTotals.set(t.categoryId!, (catTotals.get(t.categoryId!) ?? 0) + t.amount)
+    }
+    const top3 = [...catTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+    const catLines = top3.map(([id, amt]) => `  • ${catMap.get(id) ?? 'Uncategorised'}: RM${fmt(amt)}`).join('\n')
+    await sendMessage(chatId, `<b>Spending Trend</b>
+
+<b>${prevMonthStr}</b>: Income RM${fmt(prevIncome)} · Spent RM${fmt(prevSpent)} · Net RM${fmt(prevIncome - prevSpent)}
+<b>${monthStr} (so far)</b>: Income RM${fmt(thisIncome)} · Spent RM${fmt(thisSpent)} · Net RM${fmt(thisIncome - thisSpent)}
+
+Spent ${spentΔ >= 0 ? '+' : ''}RM${fmt(spentΔ)} vs last month
+
+<b>Top categories this month:</b>
+${catLines || '  (no categorised transactions)'}`)
+
+  } else if (parsed.intent === 'check_category_budget') {
+    const allCats = await db.select().from(financeCategories).where(eq(financeCategories.userId, userId))
+    const catQ = (parsed.categoryName ?? '').toLowerCase()
+    const matched = catQ ? allCats.find(c => c.name.toLowerCase().includes(catQ) || catQ.includes(c.name.toLowerCase())) : null
+    if (!matched) {
+      const withBudget = allCats.filter(c => c.monthlyLimit).map(c => `• ${c.name}: RM${fmt(c.monthlyLimit!)} limit`).join('\n')
+      await sendMessage(chatId, `Category not found. Categories with budgets:\n${withBudget || '(none set — add limits in duitaku → Categories)'}`)
+      return
+    }
+    const [row] = await db.select({
+      total: sql<number>`coalesce(sum(${financeTransactions.amount}), 0)`,
+    }).from(financeTransactions).where(and(
+      eq(financeTransactions.userId, userId),
+      eq(financeTransactions.categoryId, matched.id),
+      sql`${financeTransactions.date} like ${monthStr + '-%'}`,
+      eq(financeTransactions.type, 'expense'),
+    ))
+    const spent = Number(row?.total ?? 0)
+    const limit = matched.monthlyLimit ?? 0
+    if (limit > 0) {
+      const pct = Math.round((spent / limit) * 100)
+      const remaining = Math.max(0, limit - spent)
+      await sendMessage(chatId, `<b>${matched.name} Budget</b>\n\n[${progBar(spent, limit)}] ${pct}%\nSpent: RM${fmt(spent)} of RM${fmt(limit)}\nRemaining: RM${fmt(remaining)}`)
+    } else {
+      await sendMessage(chatId, `<b>${matched.name}</b>\nSpent this month: RM${fmt(spent)}\n(No budget limit set — add one in duitaku → Categories)`)
+    }
+
+  } else if (parsed.intent === 'add_savings') {
+    const goals = await db.select().from(financeSavingsGoals).where(eq(financeSavingsGoals.userId, userId))
+    if (goals.length === 0) {
+      await sendMessage(chatId, 'No savings goals found. Create one in duitaku → Savings.')
+      return
+    }
+    const goalQ = (parsed.goalName ?? '').toLowerCase()
+    let goal = goalQ ? goals.find(g => g.name.toLowerCase().includes(goalQ) || goalQ.includes(g.name.toLowerCase())) : null
+    if (!goal && goals.length === 1) goal = goals[0]
+    if (!goal) {
+      const list = goals.map(g => `• ${g.name}`).join('\n')
+      await sendMessage(chatId, `Which savings goal?\n${list}`)
+      return
+    }
+    let savingsAmt: number
+    try { savingsAmt = validateAmount(parsed.savingsAmount) } catch {
+      await sendMessage(chatId, 'Invalid amount. Try: "saved RM200 for emergency fund"')
+      return
+    }
+    const newAmount = goal.currentAmount + savingsAmt
+    await db.update(financeSavingsGoals).set({ currentAmount: newAmount }).where(eq(financeSavingsGoals.id, goal.id))
+    const pct = goal.targetAmount && goal.targetAmount > 0 ? ` (${Math.round((newAmount / goal.targetAmount) * 100)}% of goal)` : ''
+    await sendMessage(chatId, `✅ Added RM${fmt(savingsAmt)} to ${goal.name}. Total: RM${fmt(newAmount)}${pct}.`)
+
+  } else if (parsed.intent === 'undo_last') {
+    const [lastTx] = await db.select().from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId))
+      .orderBy(desc(financeTransactions.createdAt))
+      .limit(1)
+    if (!lastTx) {
+      await sendMessage(chatId, 'No transactions to undo.')
+      return
+    }
+    await db.delete(financeTransactions).where(eq(financeTransactions.id, lastTx.id))
+    const label = lastTx.merchant ?? lastTx.note ?? '?'
+    await sendMessage(chatId, `Deleted: RM${fmt(lastTx.amount)} — ${label} on ${lastTx.date}.`)
+
+  } else if (parsed.intent === 'set_category_budget') {
+    const allCats = await db.select().from(financeCategories).where(eq(financeCategories.userId, userId))
+    const catQ = (parsed.categoryName ?? '').toLowerCase()
+    const matched = catQ ? allCats.find(c => c.name.toLowerCase().includes(catQ) || catQ.includes(c.name.toLowerCase())) : null
+    if (!matched) {
+      await sendMessage(chatId, `Category not found. Try: "set food budget RM500"\n\nYour categories:\n${allCats.map(c => `• ${c.name}`).join('\n') || '(none)'}`)
+      return
+    }
+    let budgetAmt: number
+    try { budgetAmt = validateAmount(parsed.budgetAmount) } catch {
+      await sendMessage(chatId, 'Invalid amount. Try: "set food budget RM500"')
+      return
+    }
+    await db.update(financeCategories).set({ monthlyLimit: budgetAmt }).where(and(eq(financeCategories.id, matched.id), eq(financeCategories.userId, userId)))
+    await sendMessage(chatId, `✅ Budget for <b>${matched.name}</b> set to RM${fmt(budgetAmt)}/month.`)
+
   } else {
-    await sendMessage(chatId, `I didn't understand that. Send /help to see everything I can do.\n\nQuick examples:\n• "spent RM45 lunch"\n• "topup RM100 to TnG"\n• "how much left"\n• "paid celcomdigi"\n• "net worth"`)
+    await sendMessage(chatId, `I didn't understand that. Send /help to see everything I can do.\n\nQuick examples:\n• "spent RM45 lunch"\n• "topup RM100 to TnG"\n• "how much left"\n• "paid celcomdigi"\n• "red flags"`)
+  }
+}
+
+async function handlePhoto(userId: string, chatId: string, photo: TelegramPhotoSize[]): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!token || !apiKey) {
+    await sendMessage(chatId, 'Receipt scanning is not configured.')
+    return
+  }
+
+  // Download the largest version of the photo
+  const largest = photo.reduce((best, p) => p.width > best.width ? p : best, photo[0])
+  try {
+    const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${largest.file_id}`)
+    const fileData = await fileRes.json() as { ok: boolean; result?: { file_path: string } }
+    if (!fileData.ok || !fileData.result) {
+      await sendMessage(chatId, 'Could not download the photo. Try again.')
+      return
+    }
+    const photoRes = await fetch(`https://api.telegram.org/file/bot${token}/${fileData.result.file_path}`)
+    const photoBuffer = await photoRes.arrayBuffer()
+    const base64 = Buffer.from(photoBuffer).toString('base64')
+
+    const anthropic = new Anthropic({ apiKey })
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+          { type: 'text', text: 'Extract from this receipt: merchant name, total amount paid (number only, no currency symbol), date (YYYY-MM-DD or null if not visible), and a brief note. Return ONLY valid JSON with no explanation: {"merchant":"string or null","amount":number or null,"date":"YYYY-MM-DD or null","note":"string or null"}' },
+        ],
+      }],
+    })
+    const content = response.content[0]
+    if (content.type !== 'text') throw new Error('no text')
+    const parsed = JSON.parse(content.text) as { merchant: string | null; amount: number | null; date: string | null; note: string | null }
+
+    if (!parsed.amount || parsed.amount <= 0) {
+      await sendMessage(chatId, 'Could not read an amount from this receipt. Please log the expense manually.')
+      return
+    }
+
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+    await db.insert(telegramPending).values({
+      userId, intent: 'ocr_confirm',
+      data: JSON.stringify({ amount: parsed.amount, merchant: parsed.merchant, date: parsed.date, note: parsed.note }),
+      expiresAt,
+    }).onConflictDoUpdate({
+      target: telegramPending.userId,
+      set: { intent: 'ocr_confirm', data: JSON.stringify({ amount: parsed.amount, merchant: parsed.merchant, date: parsed.date, note: parsed.note }), expiresAt },
+    })
+
+    const merchantLine = parsed.merchant ? `Merchant: ${parsed.merchant}` : ''
+    const dateLine = parsed.date ? `Date: ${parsed.date}` : ''
+    const noteLine = parsed.note ? `Note: ${parsed.note}` : ''
+    const details = [merchantLine, dateLine, noteLine].filter(Boolean).join('\n')
+    await sendMessage(chatId, `Receipt scanned:\nAmount: RM${fmt(parsed.amount)}\n${details}\n\nReply <b>yes</b> to log this expense, or <b>no</b> to cancel.`)
+  } catch {
+    await sendMessage(chatId, 'Could not read this receipt. Try a clearer photo or log the expense manually.')
   }
 }
 
@@ -636,9 +1126,23 @@ export async function POST(request: Request) {
 
   const body = await request.json() as TelegramUpdate
   const msg = body.message
-  if (!msg?.text || !msg.chat?.id) return Response.json({ ok: true })
+  if (!msg?.chat?.id) return Response.json({ ok: true })
 
   const chatId = String(msg.chat.id)
+
+  // Photo message — OCR receipt scanning
+  if (msg.photo && msg.photo.length > 0 && !msg.text) {
+    const [conn] = await db.select().from(telegramConnections)
+      .where(eq(telegramConnections.telegramChatId, chatId)).limit(1)
+    if (!conn) {
+      await sendMessage(chatId, "Your Telegram isn't linked yet. Use /start YOUR_CODE to link.")
+      return Response.json({ ok: true })
+    }
+    await handlePhoto(conn.userId, chatId, msg.photo)
+    return Response.json({ ok: true })
+  }
+
+  if (!msg.text) return Response.json({ ok: true })
   const text = msg.text.trim()
 
   if (text.startsWith('/start')) {
