@@ -40,9 +40,12 @@ interface TelegramUpdate { message?: TelegramMessage }
 interface ParsedIntent {
   intent: 'mark_bill_paid' | 'add_expense' | 'add_income' | 'check_balance' |
           'check_loans' | 'check_investments' | 'check_net_worth' |
-          'payment_history' | 'recent_transactions' | 'market_insights' | 'topup' | 'unknown'
+          'payment_history' | 'recent_transactions' | 'market_insights' | 'topup' |
+          'pay_loan' | 'unknown'
   billId?: string
   billName?: string
+  loanId?: string
+  loanName?: string
   amount?: number
   merchant?: string
   note?: string | null
@@ -99,6 +102,7 @@ SPENDING
 • "received RM500" — log income
 • "topup RM100 to TnG" — top up an account
 • "paid celcomdigi" — mark a bill as paid
+• "paid proton x50" — log a loan installment
 
 BALANCE & OVERVIEW
 • "how much left" — this month's budget
@@ -123,6 +127,7 @@ SPENDING
 • "received RM500 bonus" — log income
 • "topup RM100 to TnG" — top up account
 • "paid celcomdigi" — mark bill as paid
+• "paid proton x50" — log loan installment
 
 BALANCE
 • "how much left" — monthly budget
@@ -196,8 +201,10 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
     }
   }
 
-  const bills = await db.select().from(financeBills)
-    .where(and(eq(financeBills.userId, userId), eq(financeBills.isActive, true)))
+  const [bills, activeLoans] = await Promise.all([
+    db.select().from(financeBills).where(and(eq(financeBills.userId, userId), eq(financeBills.isActive, true))),
+    db.select().from(financeLoans).where(and(eq(financeLoans.userId, userId), eq(financeLoans.isActive, true))),
+  ])
 
   const monthTxns = await db.select().from(financeTransactions)
     .where(and(eq(financeTransactions.userId, userId), gte(financeTransactions.date, monthStart), lte(financeTransactions.date, monthEnd)))
@@ -233,7 +240,15 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
     parsed = { intent: 'recent_transactions' }
   } else if (['paid ', 'bayar ', 'dah bayar'].some(k => lower.startsWith(k) || lower.includes(k))) {
     const matchedBill = bills.find(b => lower.includes(b.name.toLowerCase()))
-    if (matchedBill) parsed = { intent: 'mark_bill_paid', billId: matchedBill.id, billName: matchedBill.name }
+    if (matchedBill) {
+      parsed = { intent: 'mark_bill_paid', billId: matchedBill.id, billName: matchedBill.name }
+    } else {
+      const matchedLoan = activeLoans.find(l =>
+        lower.includes(l.name.toLowerCase()) ||
+        l.name.toLowerCase().split(' ').some(w => w.length > 3 && lower.includes(w))
+      )
+      if (matchedLoan) parsed = { intent: 'pay_loan', loanId: matchedLoan.id, loanName: matchedLoan.name }
+    }
   } else if (['spent ', 'spend ', 'beli ', 'bought '].some(k => lower.includes(k))) {
     // Match "RM12.30" or bare "12.30"
     const amtMatch = text.match(/rm\s*(\d+(?:\.\d+)?)/i) ?? text.match(/\b(\d+(?:[.,]\d+)?)\b/)
@@ -292,6 +307,7 @@ async function handleMessage(userId: string, chatId: string, text: string): Prom
 Return ONLY valid JSON with no explanation.
 
 Available bills: ${JSON.stringify(bills.map(b => ({ id: b.id, name: b.name, amount: b.amount })))}
+Available loans: ${JSON.stringify(activeLoans.map(l => ({ id: l.id, name: l.name, monthlyInstallment: l.monthlyInstallment })))}
 
 Examples of natural phrasings and their outputs:
 - "spent 45 at mamak" → {"intent":"add_expense","amount":45,"merchant":"mamak","note":null}
@@ -300,9 +316,12 @@ Examples of natural phrasings and their outputs:
 - "beli kopi 4.50" → {"intent":"add_expense","amount":4.50,"merchant":null,"note":"kopi"}
 - "received bonus 500" → {"intent":"add_income","amount":500,"note":"bonus"}
 - "topup 60 touch n go" → {"intent":"topup","amount":60,"account_name":"touch n go"}
+- "paid my proton x50" → {"intent":"pay_loan","loanId":"uuid","loanName":"Proton X50"}
+- "bayar loan kereta" → {"intent":"pay_loan","loanId":"uuid","loanName":"loan name"}
 
 Return one of:
 {"intent":"mark_bill_paid","billId":"uuid","billName":"string"}
+{"intent":"pay_loan","loanId":"uuid","loanName":"string"}
 {"intent":"add_expense","amount":number,"merchant":"string or null","note":"string or null"}
 {"intent":"add_income","amount":number,"note":"string"}
 {"intent":"check_balance","_":""}
@@ -480,6 +499,39 @@ ${insight.signalReason}
     await db.insert(financeBillPayments).values({ billId: bill.id, month: monthStr, paidAt: now })
     await db.insert(financeTransactions).values({ userId, amount: bill.amount, currency: 'MYR', date: today, merchant: bill.name, type: 'expense' })
     await sendMessage(chatId, `✅ ${bill.name} marked paid — RM${fmt(bill.amount)} logged as expense`)
+
+  } else if (parsed.intent === 'pay_loan') {
+    let loan = activeLoans.find(l => l.id === parsed.loanId)
+    if (!loan && parsed.loanName) {
+      const nl = parsed.loanName.toLowerCase()
+      loan = activeLoans.find(l => l.name.toLowerCase().includes(nl) || nl.includes(l.name.toLowerCase()))
+    }
+    if (!loan) loan = activeLoans.find(l => lower.includes(l.name.toLowerCase()))
+
+    if (!loan) {
+      const loanList = activeLoans.length > 0 ? activeLoans.map(l => `• ${l.name}`).join('\n') : '(no active loans)'
+      await sendMessage(chatId, `Couldn't find that loan. Your active loans:\n${loanList}`)
+      return
+    }
+
+    const newBalance = Math.max(0, loan.outstandingBalance - loan.monthlyInstallment)
+    const isNowPaidOff = newBalance === 0
+
+    await db.insert(financeTransactions).values({
+      userId, accountId: null, amount: loan.monthlyInstallment, currency: 'MYR', date: today,
+      type: 'expense', merchant: loan.name,
+      note: `Loan installment — ${loan.lender ?? loan.type}`, isRecurring: true,
+    })
+    await db.update(financeLoans).set({
+      outstandingBalance: newBalance,
+      lastPaidAt: now,
+      ...(isNowPaidOff && { isActive: false }),
+    }).where(and(eq(financeLoans.id, loan.id), eq(financeLoans.userId, userId)))
+
+    const msg = isNowPaidOff
+      ? `Loan fully paid off! ${loan.name} marked complete. RM${fmt(loan.monthlyInstallment)} logged.`
+      : `Loan installment paid — RM${fmt(loan.monthlyInstallment)} logged for ${loan.name}. RM${fmt(newBalance)} remaining.`
+    await sendMessage(chatId, `✅ ${msg}`)
 
   } else if (parsed.intent === 'add_expense') {
     let amount: number
