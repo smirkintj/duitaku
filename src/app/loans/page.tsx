@@ -19,6 +19,7 @@ interface Loan {
   billId: string | null
   notes: string | null
   isActive: boolean
+  lastPaidAt: string | null
   createdAt: string
 }
 
@@ -136,6 +137,7 @@ export default function LoansPage() {
   const [fInterestRate, setFInterestRate] = useState('')
   const [fNotes, setFNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [payingLoan, setPayingLoan] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -204,6 +206,19 @@ export default function LoansPage() {
     if (!confirm('Archive this loan?')) return
     await fetch(`/api/loans/${id}`, { method: 'DELETE' })
     await load()
+  }
+
+  async function handlePayLoan(loan: Loan) {
+    setPayingLoan(loan.id)
+    const d = new Date()
+    const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    await fetch(`/api/loans/${loan.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payInstallment: true, date: localDate }),
+    })
+    await load()
+    setPayingLoan(null)
   }
 
   // Summary calculations
@@ -382,23 +397,60 @@ export default function LoansPage() {
                     </div>
 
                     {/* Footer row */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #1a1a1a', paddingTop: 12 }}>
-                      <div>
-                        <div style={{ ...S.label, marginBottom: 3 }}>MONTHLY</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>
-                          RM {formatRM(loan.monthlyInstallment)}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ ...S.label, marginBottom: 3 }}>EST. PAYOFF</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: timelineColor(payoffMonths), ...S.sans }}>
-                          {payoffInfo.label}
-                        </div>
-                        <div style={{ fontSize: 10, color: '#5b5b59', ...S.mono, marginTop: 1 }}>
-                          {payoffMonths} mo left
-                        </div>
-                      </div>
-                    </div>
+                    {(() => {
+                      const now = new Date()
+                      const paidThisMonth = loan.lastPaidAt
+                        ? (() => {
+                            const p = new Date(loan.lastPaidAt)
+                            return p.getFullYear() === now.getFullYear() && p.getMonth() === now.getMonth()
+                          })()
+                        : false
+                      return (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #1a1a1a', paddingTop: 12 }}>
+                            <div>
+                              <div style={{ ...S.label, marginBottom: 3 }}>MONTHLY</div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f4', ...S.sans }}>
+                                RM {formatRM(loan.monthlyInstallment)}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ ...S.label, marginBottom: 3 }}>EST. PAYOFF</div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: timelineColor(payoffMonths), ...S.sans }}>
+                                {payoffInfo.label}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#5b5b59', ...S.mono, marginTop: 1 }}>
+                                {payoffMonths} mo left
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Pay installment row */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                            <div>
+                              {loan.lastPaidAt && (
+                                <div style={{ fontSize: 10, color: '#5b5b59', ...S.mono, letterSpacing: '0.04em' }}>
+                                  LAST PAID {new Date(loan.lastPaidAt).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            {paidThisMonth ? (
+                              <button disabled style={{ background: 'rgba(163,230,53,0.08)', color: '#a3e635', border: '1px solid rgba(163,230,53,0.25)', borderRadius: 8, padding: '7px 14px', cursor: 'default', fontSize: 12, fontWeight: 600, ...S.sans }}>
+                                Paid this month
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handlePayLoan(loan)}
+                                disabled={payingLoan === loan.id}
+                                style={{ background: '#a3e635', color: '#0d0d0d', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: payingLoan === loan.id ? 'default' : 'pointer', fontSize: 12.5, fontWeight: 600, ...S.sans, opacity: payingLoan === loan.id ? 0.6 : 1 }}
+                              >
+                                {payingLoan === loan.id ? 'Paying…' : `Pay RM ${formatRM(loan.monthlyInstallment)}`}
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )
+                    })()}
                   </div>
                 )
               })}

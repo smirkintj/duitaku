@@ -194,6 +194,7 @@ export const financeLoans = pgTable('finance_loans', {
   billId: uuid('bill_id').references(() => financeBills.id, { onDelete: 'set null' }),
   notes: text('notes'),
   isActive: boolean('is_active').notNull().default(true),
+  lastPaidAt: timestamp('last_paid_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
