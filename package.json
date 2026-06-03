@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "postinstall": "cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
