@@ -9,6 +9,8 @@
     "lint": "eslint",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "cap:sync": "cap sync ios",
+    "cap:open": "cap open ios",
     "postinstall": "cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true"
   },
   "dependencies": {

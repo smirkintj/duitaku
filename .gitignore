@@ -34,3 +34,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .claude/
+
+# capacitor — ios/ is generated on your Mac, not committed
+/ios/
+/android/
